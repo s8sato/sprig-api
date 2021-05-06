@@ -31,14 +31,14 @@ async fn main() -> std::io::Result<()> {
         App::new()
         .data(pool.clone())
         .wrap(middleware::Logger::default())
-        .wrap(Cors::permissive()) // TODO tighten for production
+        .wrap(Cors::permissive()) // TODOX tighten for production
         .wrap(IdentityService::new(
             CookieIdentityPolicy::new(utils::SECRET_KEY.as_bytes())
             .name("auth")
             .path("/")
-            // .domain(utils::env_var("COOKIE_DOMAIN").as_str()) // TODO if cross domain
+            // .domain(utils::env_var("COOKIE_DOMAIN").as_str()) // TODOX if cross domain
             .max_age(86400)
-            .secure(utils::env_var("API_PROTOCOL") == "https") // TODO https
+            .secure(utils::env_var("API_PROTOCOL") == "https") // TODOX https
         ))
         .data(web::JsonConfig::default().limit(4096))
         .service(web::scope("/api")

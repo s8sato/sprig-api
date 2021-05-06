@@ -202,7 +202,7 @@ pub struct Attribute {
 impl ResCommand {
     fn help() -> Self {
         Self::Help(String::from(
-            // TODO search examples
+            // TODOX search examples
             "\
             <!-- Press [Ctrl] + [↓] -->\n\
             \n\
@@ -235,7 +235,7 @@ impl ResCommand {
                     deadline: None,
                     priority: None,
                     weight: None,
-                    link: None, // TODO tutorial external
+                    link: None, // TODOX tutorial external
                     schedule: None,
                 },
             ],
