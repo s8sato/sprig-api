@@ -64,36 +64,39 @@ parser! {
     fn req_[Input]()(Input) -> Req
     where [ Input: Stream<Token = char> ] {
         choice((
-            token('/').with(optional(req_command_())).map(|opt| {
-                Req::Command(opt.unwrap_or(ReqCommand::Help))
+            token('/').with(optional(req_cmd_())).map(|opt| {
+                Req::Cmd(opt.unwrap_or(ReqCmd::Help))
             }),
             many(req_task_()).map(|ts| {
                 Req::Tasks(ReqTasks {
                     tasks: ts,
                 })
             }),
-        ))
+        )).skip(eof())
     }
 }
 parser! {
-    fn req_command_[Input]()(Input) -> ReqCommand
+    fn req_cmd_[Input]()(Input) -> ReqCmd
     where [ Input: Stream<Token = char> ] {
         choice((
             token('u').with(optional(spaces1_().with(req_user_()))).map(|opt| {
-                ReqCommand::User(opt.unwrap_or(ReqUser::Info))
+                ReqCmd::User(opt.unwrap_or(ReqUser::Help))
             }),
-            token('s').with(conditions_()).map(|x| {
-                ReqCommand::Search(x)
+            token('s').with(optional(spaces1_().with(condition_()))).map(|opt| {
+                ReqCmd::Search(opt.map(|con| ReqSearch::Condition(con)).unwrap_or(ReqSearch::Help))
             }),
-            string("tutorial").map(|_| ReqCommand::Tutorial),
-            string("coffee").map(|_| ReqCommand::Coffee),
+            attempt(string("tutorial")).map(|_| ReqCmd::Tutorial),
+            attempt(string("coffee")).map(|_| ReqCmd::Coffee),
         ))
     }
 }
 parser! {
     fn req_user_[Input]()(Input) -> ReqUser
     where [ Input: Stream<Token = char> ] {
-        token('-').with(req_modify_()).map(|x| ReqUser::Modify(x))
+        attempt(token('-').with(choice((
+            token('i').map(|_| ReqUser::Info),
+            req_modify_().map(|x| ReqUser::Modify(x)),
+        ))))
     }
 }
 parser! {
@@ -124,7 +127,7 @@ parser! {
 parser! {
     fn timescale_[Input]()(Input) -> Timescale
     where [ Input: Stream<Token = char> ] {
-        let p = |t: Timescale| string(t.as_str()).map(move |_| t.clone());
+        let p = |t: Timescale| attempt(string(t.as_str())).map(move |_| t.clone());
         choice((
             p(Timescale::Year),
             p(Timescale::Quarter),
@@ -142,7 +145,7 @@ parser! {
 parser! {
     fn req_allocation_[Input]()(Input) -> ReqAllocation
     where [ Input: Stream<Token = char> ] {
-        non_nega_i_().skip(token(':')).and(non_nega_i_()).skip(token('-')).and(non_nega_i_()).skip(token('h'))
+        non_nega_i_().skip(token(':')).and(non_nega_i_()).skip(token('-')).and(non_nega_i_())
         .map(|((open_h, open_m), hours)| ReqAllocation {
             open_h: open_h,
             open_m: open_m,
@@ -151,16 +154,26 @@ parser! {
     }
 }
 parser! {
-    fn conditions_[Input]()(Input) -> Condition
+    fn condition_[Input]()(Input) -> Condition
     where [ Input: Stream<Token = char> ] {
-        many(spaces1_().with(condition_()))
+        sep_by1(condition_item_(), spaces1_())
     }
 }
 parser! {
-    fn condition_[Input]()(Input) -> Condition
+    fn condition_item_[Input]()(Input) -> Condition
     where [ Input: Stream<Token = char> ] {
         choice((
-            token('-').with(booleans1_()).map(|x| {
+            attempt(optional(token('@').or(token('&'))).and(expression_())).map(|(opt, expr)| {
+                let mut condition = Condition::default();
+                match opt {
+                    None => condition.title = Some(expr),
+                    Some('@') => condition.assign = Some(expr),
+                    Some('&') => condition.link = Some(expr),
+                    _ => unreachable!()
+                }
+                condition
+            }),
+            attempt(token('-').with(boolean_())).map(|x| {
                 let mut condition = Condition::default();
                 condition.boolean = x;
                 condition
@@ -173,7 +186,7 @@ parser! {
                 condition
             }),
             attempt(
-                optional(non_nega_f_().skip(token('<'))).skip(token('w')).and(optional(token('<').with(non_nega_f_())))
+                optional(non_nega_f_().skip(token('<'))).skip(token('$')).and(optional(token('<').with(non_nega_f_())))
             ).map(|(l, r)| {
                 let mut condition = Condition::default();
                 condition.weight = (l, r);
@@ -193,16 +206,6 @@ parser! {
                     'd' => condition.deadline = (l, r),
                     'c' => condition.created_at = (l, r),
                     'u' => condition.updated_at = (l, r),
-                    _ => unreachable!()
-                }
-                condition
-            }),
-            attempt(optional(token('@').or(token('&'))).and(expression_())).map(|(opt, expr)| {
-                let mut condition = Condition::default();
-                match opt {
-                    None => condition.title = Some(expr),
-                    Some('@') => condition.assign = Some(expr),
-                    Some('&') => condition.link = Some(expr),
                     _ => unreachable!()
                 }
                 condition
@@ -254,20 +257,20 @@ parser! { // ####" any "####
     }
 }
 parser! {
-    fn booleans1_[Input]()(Input) -> Boolean
+    fn boolean_[Input]()(Input) -> Boolean
     where [ Input: Stream<Token = char> ] {
-        many1(boolean_())
+        many(boolean_item_())
     }
 }
 parser! {
-    fn boolean_[Input]()(Input) -> Boolean
+    fn boolean_item_[Input]()(Input) -> Boolean
     where [ Input: Stream<Token = char> ] {
-        optional(token('!')).and(choice((
+        attempt(optional(token('!')).and(choice((
             token('a'),
             token('s'),
             token('l'),
             token('r'),
-        ))).map(|(not, c)| {
+        )))).map(|(not, c)| {
             let mut boolean = Boolean::default();
             let some = Some(not.is_none());
             match c {
@@ -345,8 +348,8 @@ parser! {
 parser! {
     fn req_task_[Input]()(Input) -> ReqTask
     where [ Input: Stream<Token = char> ] {
-        indents_()
-        .and(attributes1_())
+        indent_()
+        .and(attribute_())
         .and(optional(attempt(newline().with(inline_spaces_().with(link_())))))
         .skip(choice((
             newline().map(|_| ()),
@@ -360,15 +363,15 @@ parser! {
     }
 }
 parser! {
-    fn indents_[Input]()(Input) -> i32
+    fn indent_[Input]()(Input) -> i32
     where [ Input: Stream<Token = char> ] {
-        many(indent_())
+        many(indent_item_())
     }
 }
 #[derive(Debug, PartialEq)]
 struct Indent;
 parser! {
-    fn indent_[Input]()(Input) -> Indent
+    fn indent_item_[Input]()(Input) -> Indent
     where [ Input: Stream<Token = char> ] {
         choice((
             token('\t').map(|_| Indent),
@@ -405,13 +408,13 @@ impl std::iter::Extend<Self> for Attribute {
     }
 }
 parser! {
-    fn attributes1_[Input]()(Input) -> Attribute
+    fn attribute_[Input]()(Input) -> Attribute
     where [ Input: Stream<Token = char> ] {
-        sep_by1(attribute_(), inline_spaces1_())
+        sep_by1(attribute_item_(), inline_spaces1_())
     }
 }
 parser! {
-    fn attribute_[Input]()(Input) -> Attribute
+    fn attribute_item_[Input]()(Input) -> Attribute
     where [ Input: Stream<Token = char> ] {
         choice((
             token('*').map(|_| {
@@ -592,23 +595,27 @@ mod tests {
         let t_01 = req_().easy_parse("/");
         let t_10 = req_().easy_parse("/12/- * task");
         assert_eq!(t_00, Ok((Req::Tasks(ReqTasks { tasks: Vec::new() }), "")));
-        assert_eq!(t_01, Ok((Req::Command(ReqCommand::Help), "")));
-        assert_eq!(t_10, Ok((Req::Command(ReqCommand::Help), "12/- * task")));
+        assert_eq!(t_01, Ok((Req::Cmd(ReqCmd::Help), "")));
+        assert_eq!(t_10, Ok((Req::Cmd(ReqCmd::Help), "12/- * task")));
     }
     #[test]
-    fn t_req_command_() {
-        let t_01 = req_command_().easy_parse("u");
-        let t_02 = req_command_().easy_parse("s");
-        let t_03 = req_command_().easy_parse("tutorial");
-        let t_04 = req_command_().easy_parse("coffee");
-        let t_10 = req_command_().easy_parse(" ");
-        let t_11 = req_command_().easy_parse("x");
-        assert_eq!(t_01, Ok((ReqCommand::User(ReqUser::Info), "")));
-        assert_eq!(t_02, Ok((ReqCommand::Search(Condition::default()), "")));
-        assert_eq!(t_03, Ok((ReqCommand::Tutorial, "")));
-        assert_eq!(t_04, Ok((ReqCommand::Coffee, "")));
+    fn t_req_cmd_() {
+        let t_01 = req_cmd_().easy_parse("u");
+        let t_02 = req_cmd_().easy_parse("s");
+        let t_03 = req_cmd_().easy_parse("tutorial");
+        let t_04 = req_cmd_().easy_parse("coffee");
+        let t_05 = req_cmd_().easy_parse("s #");
+        let t_10 = req_cmd_().easy_parse(" ");
+        let t_11 = req_cmd_().easy_parse("x");
+        let t_12 = req_cmd_().easy_parse("t");
+        assert_eq!(t_01, Ok((ReqCmd::User(ReqUser::Help), "")));
+        assert_eq!(t_02, Ok((ReqCmd::Search(ReqSearch::Help), "")));
+        assert_eq!(t_03, Ok((ReqCmd::Tutorial, "")));
+        assert_eq!(t_04, Ok((ReqCmd::Coffee, "")));
+        assert_eq!(t_05, Ok((ReqCmd::Search(ReqSearch::Condition(Condition::default())), "")));
         assert!(t_10.is_err());
         assert!(t_11.is_err());
+        assert!(t_12.is_err());
     }
     #[test]
     fn t_req_user_() {
@@ -659,18 +666,18 @@ mod tests {
         assert!(t_13.is_err());
     }
     #[test]
-    fn t_conditions_() {
-        let t_00 = conditions_().easy_parse("");
-        let t_02 = conditions_().easy_parse(" # w");
-        let t_03 = conditions_().easy_parse(
-            r##" 333<#<777 -a!s -l .5<w<24 s<15: /12/<d c 2021//<u<//30T6:"##
+    fn t_condition_() {
+        let t_02 = condition_().easy_parse("# $");
+        let t_03 = condition_().easy_parse(
+            r##"333<#<777 -a!s -l .5<$<24 s<15: /12/<d c 2021//<u<//30T6:"##
         );
-        let t_04 = conditions_().easy_parse(
-            r##" 333<#<777 -a!s -l .5<w<24 s<15: /12/<d c 2021//<u<//30T6: "tit le" @r#"double"quoted"man"# &r".*domain\.com.*\?page=[1-5]#(frag|ment)""##
+        let t_04 = condition_().easy_parse(
+            r##"333<#<777 -a!s -l .5<$<24 s<15: /12/<d c 2021//<u<//30T6: "tit le" @r#"double"quoted"man"# &r".*domain\.com.*\?page=[1-5]#(frag|ment)""##
         );
-        let t_10 = conditions_().easy_parse(" title");
-        let t_11 = conditions_().easy_parse(" ");
-        assert_eq!(t_00, Ok((
+        let t_10 = condition_().easy_parse(" title");
+        let t_11 = condition_().easy_parse(" ");
+        let t_12 = condition_().easy_parse("");
+        assert_eq!(t_02, Ok((
             Condition {
                 boolean: Boolean {
                     is_archived: None,
@@ -690,7 +697,6 @@ mod tests {
             },
             ""
         )));
-        assert_eq!(t_02, t_00);
         assert_eq!(t_03, Ok((
             Condition {
                 boolean: Boolean {
@@ -818,6 +824,7 @@ mod tests {
         )));
         assert!(t_10.is_err());
         assert!(t_11.is_err());
+        assert!(t_12.is_err());
     }
     #[test]
     fn t_expression_() {
@@ -826,6 +833,7 @@ mod tests {
         let t_002 = expression_().easy_parse(r#""tit le""#);
         let t_003 = expression_().easy_parse(r#""   tit le   ""#);
         let t_004 = expression_().easy_parse(r#""tit""le""#);
+        let t_005 = expression_().easy_parse(r##"#"double"quote"#"##);
         let t_010 = expression_().easy_parse(r#"r"""#);
         let t_011 = expression_().easy_parse(r###"r##""##"###);
         let t_012 = expression_().easy_parse(r#"r"re gex""#);
@@ -846,6 +854,7 @@ mod tests {
             ]), "")));
         assert_eq!(t_003, t_002);
         assert_eq!(t_004, Ok((text::Expression::Words(vec![String::from("tit"),]), r#""le""#)));
+        assert_eq!(t_005, Ok((text::Expression::Words(vec![String::from(r#"double"quote"#),]), "")));
         assert_eq!(t_010, Ok((text::Expression::Regex(String::new()), "")));
         assert_eq!(t_011, t_010);
         assert_eq!(t_012, Ok((text::Expression::Regex(String::from("re gex")), "")));
@@ -879,9 +888,9 @@ mod tests {
         assert!(t_10.is_err());
     }
     #[test]
-    fn t_booleans1_() {
-        let t_00 = booleans1_().easy_parse("a!sl   etc...   ");
-        let t_10 = booleans1_().easy_parse("a!");
+    fn t_boolean_() {
+        let t_00 = boolean_().easy_parse("a!sl   etc...   ");
+        let t_10 = boolean_().easy_parse("!");
         assert_eq!(t_00, Ok((Boolean {
             is_archived: Some(true),
             is_starred: Some(false),
@@ -1070,12 +1079,12 @@ mod tests {
         assert!(t_14.is_err());
     }
     #[test]
-    fn t_indents_() {
-        let t_00 = indents_().easy_parse("    g");
-        let t_01 = indents_().easy_parse("\t\tg    ");
-        let t_03 = indents_().easy_parse("");
-        let t_04 = indents_().easy_parse("\n");
-        let t_10 = indents_().easy_parse("     g");
+    fn t_indent_() {
+        let t_00 = indent_().easy_parse("    g");
+        let t_01 = indent_().easy_parse("\t\tg    ");
+        let t_03 = indent_().easy_parse("");
+        let t_04 = indent_().easy_parse("\n");
+        let t_10 = indent_().easy_parse("     g");
         assert_eq!(t_00, Ok((1, "g")));
         assert_eq!(t_01, Ok((2, "g    ")));
         assert_eq!(t_03, Ok((0, "")));
@@ -1083,24 +1092,24 @@ mod tests {
         assert!(t_10.is_err());
     }
     #[test]
-    fn t_attributes1_() {
-        let t_00 = attributes1_().easy_parse("https://");
-        let t_02 = attributes1_().easy_parse("#333 h] something * 15:- 魁 -/12/ [t $5 great $530000. @satun ⚡");
-        let t_03 = attributes1_().easy_parse("//T: //T //: // T: T :");
-        let t_04 = attributes1_().easy_parse("//T- //:- T:- T-");
-        let t_10 = attributes1_().easy_parse("");
-        let t_11 = attributes1_().easy_parse(" ");
-        let t_12 = attributes1_().easy_parse("\n");
-        let t_13 = attributes1_().easy_parse("[joint]");
-        let t_14 = attributes1_().easy_parse("-2021/01/07-");
-        let t_15 = attributes1_().easy_parse("-//T title");
-        let t_16 = attributes1_().easy_parse("-//: title");
-        let t_17 = attributes1_().easy_parse("#");
-        let t_18 = attributes1_().easy_parse("]");
-        let t_19 = attributes1_().easy_parse("[");
-        let t_20 = attributes1_().easy_parse("$");
-        let t_21 = attributes1_().easy_parse("@");
-        let t_22 = attributes1_().easy_parse("-T: -T");
+    fn t_attribute_() {
+        let t_00 = attribute_().easy_parse("https://");
+        let t_02 = attribute_().easy_parse("#333 h] something * 15:- 魁 -/12/ [t $5 great $530000. @satun ⚡");
+        let t_03 = attribute_().easy_parse("//T: //T //: // T: T :");
+        let t_04 = attribute_().easy_parse("//T- //:- T:- T-");
+        let t_10 = attribute_().easy_parse("");
+        let t_11 = attribute_().easy_parse(" ");
+        let t_12 = attribute_().easy_parse("\n");
+        let t_13 = attribute_().easy_parse("[joint]");
+        let t_14 = attribute_().easy_parse("-2021/01/07-");
+        let t_15 = attribute_().easy_parse("-//T title");
+        let t_16 = attribute_().easy_parse("-//: title");
+        let t_17 = attribute_().easy_parse("#");
+        let t_18 = attribute_().easy_parse("]");
+        let t_19 = attribute_().easy_parse("[");
+        let t_20 = attribute_().easy_parse("$");
+        let t_21 = attribute_().easy_parse("@");
+        let t_22 = attribute_().easy_parse("-T: -T");
         let mut attr = Attribute::default();
         assert_eq!(t_00, Ok(({ attr.title = String::from("https://"); attr }, "")));
         assert_eq!(t_02, Ok((Attribute {

@@ -18,7 +18,7 @@ pub struct ReqBody {
 
 #[derive(Serialize)]
 enum ResBody {
-    Command(ResCommand),
+    Cmd(ResCmd),
     Tasks {
         created: i32,
         updated: i32,
@@ -36,20 +36,17 @@ pub async fn text(
     let res_body = web::block(move || {
         let conn = pool.get().unwrap();
         match req {
-            Req::Command(cmd) => {
-                let res_command = match cmd {
+            Req::Cmd(cmd) => Ok(ResBody::Cmd(
+                match cmd {
                     // TODO /alias
-                    ReqCommand::Help              => ResCommand::help(),
-                    ReqCommand::User(request)     => request.handle(&user, &conn)?,
-                    ReqCommand::Search(condition) => condition.extract(&user, &conn)?,
-                    ReqCommand::Tutorial          => ResCommand::tutorial(),
-                    ReqCommand::Coffee            => return Err(errors::ServiceError::BadRequest("I'm a teapot.".into())),
-                };
-                Ok(ResBody::Command(res_command))
-            },
-            Req::Tasks(tasks) => {
-                Ok(tasks.read(&user)?.accept(&user, &conn)?.upsert(&conn)?)
-            }
+                    ReqCmd::Help              => ResCmd::Help(cmd_help("root.md")?),
+                    ReqCmd::User(req)         => ResCmd::User(req.handle(&user, &conn)?),
+                    ReqCmd::Search(req)       => ResCmd::Search(req.handle(&user, &conn)?),
+                    ReqCmd::Tutorial          => ResCmd::Tutorial(cmd_help("tutorial.md")?),
+                    ReqCmd::Coffee            => return Err(errors::ServiceError::BadRequest("I'm a teapot.".into())),
+                }
+            )),
+            Req::Tasks(tasks) => Ok(tasks.read(&user)?.accept(&user, &conn)?.upsert(&conn)?),
         }
     }).await?;
 
@@ -58,23 +55,30 @@ pub async fn text(
 
 #[derive(Debug, PartialEq)]
 pub enum Req {
-    Command(ReqCommand),
+    Cmd(ReqCmd),
     Tasks(ReqTasks),
 }
 
 #[derive(Debug, PartialEq)]
-pub enum ReqCommand {
+pub enum ReqCmd {
     Help,
     User(ReqUser),
-    Search(Condition),
+    Search(ReqSearch),
     Tutorial,
     Coffee,
 }
 
 #[derive(Debug, PartialEq)]
 pub enum ReqUser {
+    Help,
     Info,
     Modify(ReqModify),
+}
+
+#[derive(Debug, PartialEq)]
+pub enum ReqSearch {
+    Help,
+    Condition(Condition),
 }
 
 #[derive(Debug, PartialEq)]
@@ -96,19 +100,16 @@ pub struct PasswordSet {
 pub type ReqAllocation = models::ResAllocation;
 
 #[derive(Serialize)]
-enum ResCommand {
+enum ResCmd {
     Help(String),
     User(ResUser),
-    Search {
-        tasks: Vec<models::ResTask>,
-    },
-    Tutorial {
-        tasks: Vec<models::ResTask>,
-    },
+    Search(ResSearch),
+    Tutorial(String),
 }
 
 #[derive(Serialize)]
 enum ResUser {
+    Help(String),
     Info {
         since: DateTime<Utc>,
         executed: i32,
@@ -140,12 +141,17 @@ pub enum Timescale {
     Second,
 }
 
+#[derive(Serialize)]
+enum ResSearch {
+    Help(String),
+    Condition(Vec<models::ResTask>),
+}
+
 #[derive(Debug, Default, PartialEq, PartialOrd)]
 pub struct Condition {
     pub boolean: Boolean,
     // TODO limit 333<#<777 use to !is_archived
-    // TODO impl 333<!<777 for critical path
-    // show critical Path between 2 selected tasks
+    // TODO impl 333<!<777 for critical-Path
     pub context: Range<i32>,
     pub weight: Range<f32>,
     pub startable: Range<models::EasyDateTime>,
@@ -199,50 +205,6 @@ pub struct Attribute {
     pub title: String,
 }
 
-impl ResCommand {
-    fn help() -> Self {
-        Self::Help(String::from(
-            // TODOX search examples
-            "\
-            <!-- Press [Ctrl] + [↓] -->\n\
-            \n\
-            \n\
-            \n\
-            <!-- Select one, remove <!-- prefix, configure it, and send. -->\n\
-            \n\
-            <!-- / <!-- this help -->\n\
-            <!-- /tutorial <!-- tutorial -->\n\
-            <!-- /u <!-- show user info -->\n\
-            <!-- /u -e {email} <!-- modify user email -->\n\
-            <!-- /u -p {old} {new} {confirmation} <!-- modify user password -->\n\
-            <!-- /u -n {name} <!-- modify user name -->\n\
-            <!-- /u -t {timescale} <!-- modify user default timescale -->\n\
-            <!-- /u -a {h}:{m}-{i}h {h}:{m}-{i}h ... <!-- modify user time allocations -->\n\
-            <!-- /s {conditions} <!-- search for tasks by conditions -->\n\
-            "
-        ))
-    }
-    fn tutorial() -> Self {
-        Self::Tutorial {
-            tasks : vec![
-                models::ResTask {
-                    id: 0,
-                    title: String::from("Press H to return home"),
-                    assign: String::from("sprig"),
-                    is_archived: false,
-                    is_starred: true,
-                    startable: None,
-                    deadline: None,
-                    priority: None,
-                    weight: None,
-                    link: None, // TODOX tutorial external
-                    schedule: None,
-                },
-            ],
-        }
-    }
-}
-
 #[derive(AsChangeset)]
 #[table_name = "users"]
 struct AltUser {
@@ -256,12 +218,13 @@ impl ReqUser {
     fn handle(self,
         user: &models::AuthedUser,
         conn: &models::Conn,
-    ) -> Result<ResCommand, errors::ServiceError> {
+    ) -> Result<ResUser, errors::ServiceError> {
         let res = match self {
+            Self::Help => ResUser::Help(cmd_help("user.md")?),
             Self::Info => self.info(user, conn)?,
             Self::Modify(req) => ResUser::Modify(req.exec(user, conn)?),
         };
-        Ok(ResCommand::User(res))
+        Ok(res)
     }
     fn info(&self,
         user: &models::AuthedUser,
@@ -411,11 +374,24 @@ impl ReqAllocation {
     }
 }
 
+impl ReqSearch {
+    fn handle(self,
+        user: &models::AuthedUser,
+        conn: &models::Conn,
+    ) -> Result<ResSearch, errors::ServiceError> {
+        let res = match self {
+            Self::Help => ResSearch::Help(cmd_help("search.md")?),
+            Self::Condition(con) => ResSearch::Condition(con.extract(user, conn)?),
+        };
+        Ok(res)
+    }
+}
+
 impl Condition {
     fn extract(&self,
         user: &models::AuthedUser,
         conn: &models::Conn,
-    ) -> Result<ResCommand, errors::ServiceError> {
+    ) -> Result<Vec<models::ResTask>, errors::ServiceError> {
         use crate::schema::arrows::dsl::arrows;
 
         let mut res_tasks = self.query(user, conn)?;
@@ -425,9 +401,7 @@ impl Condition {
             let _arrows: models::Arrows = arrows.load::<models::Arrow>(conn)?.into();
             self.filter_context(&mut res_tasks, &_arrows);
         }
-        Ok(ResCommand::Search {
-            tasks: res_tasks,
-        })
+        Ok(res_tasks)
     }
     fn query(&self,
         user: &models::AuthedUser,
@@ -866,4 +840,9 @@ impl From<TmpTaskOk> for AltTask {
             link: Some(tmp.link),
         }
     }
+}
+
+fn cmd_help(f: &str) -> std::io::Result<String> {
+    let path = std::path::Path::new("src/handlers/app/_cmd_help").join(f);
+    std::fs::read_to_string(path)
 }

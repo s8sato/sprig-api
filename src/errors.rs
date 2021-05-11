@@ -79,3 +79,10 @@ impl From<StringStreamError> for ServiceError {
         }
     }
 }
+
+impl From<std::io::Error> for ServiceError {
+    fn from(error: std::io::Error) -> Self {
+        dbg!(&error);
+        Self::InternalServerError
+    }
+}
