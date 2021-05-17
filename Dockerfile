@@ -20,13 +20,10 @@ CMD if [ -f "___migration___" ]; then \
     fi && \
     cargo watch -x run
 
-FROM base AS build
+FROM base AS prod
 WORKDIR /usr/local/src
-ENV CARGO_TARGET_DIR=/tmp/target
 COPY . .
 RUN cargo build --release
-
-FROM base as prod
-COPY --from=build /tmp/target/release/api /usr/local/bin/
+RUN cp target/release/api /usr/local/bin/
 # TODO diesel migration run
 CMD ["api"]
