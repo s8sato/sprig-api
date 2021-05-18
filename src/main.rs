@@ -35,11 +35,13 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .data(pool.clone())
             .wrap(middleware::Logger::default())
-            .wrap(
+            .wrap(if utils::env_var("MODE") == "dev" {
+                Cors::permissive()
+            } else {
                 Cors::default()
                     .allowed_origin(&utils::env_var("ACCESS_CONTROL_ALLOW_ORIGIN"))
-                    .supports_credentials(),
-            )
+                    .supports_credentials()
+            })
             .wrap(IdentityService::new(
                 CookieIdentityPolicy::new(utils::SECRET_KEY.as_bytes())
                     .name("auth")

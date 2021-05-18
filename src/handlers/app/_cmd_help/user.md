@@ -18,7 +18,7 @@ and press [Ctrl]+[Enter] to submit. -->
 <!-- TODOX /u -permission -->
 <!-- /u -p1 {user} <!-- give user permission to view your items -->
 <!-- /u -p2 {user} <!-- give user permission to view and edit your items -->
-<!-- /u -p0 {user} <!-- deprive user of the permission to view and edit your items -->
+<!-- /u -p0 {user} <!-- deprive user of permission to view and edit your items -->
 <!--
 Permission(Some(Edit(false)))
 Permission(Some(Edit(true)))

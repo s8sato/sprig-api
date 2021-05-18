@@ -8,7 +8,7 @@ then follow the line-by-line instructions. -->
 
 
 U ...more info -:0
-https://github.com/satu-n/works-sprig
+https://github.com/satu-n/works-sprig#how-to-use
     F, R $1
         F, J $1
             P, P, Q, Q, J $1
