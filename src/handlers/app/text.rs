@@ -3,7 +3,7 @@ use chrono::{DateTime, NaiveTime, Utc};
 use chrono_tz::Tz;
 use diesel::prelude::*;
 use regex::Regex;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::cmp::max;
 
 use crate::errors;
@@ -19,10 +19,7 @@ pub struct ReqBody {
 #[derive(Serialize)]
 enum ResBody {
     Cmd(ResCmd),
-    Tasks {
-        created: i32,
-        updated: i32,
-    },
+    Tasks { created: i32, updated: i32 },
 }
 
 pub async fn text(
@@ -30,25 +27,25 @@ pub async fn text(
     user: models::AuthedUser,
     pool: web::Data<models::Pool>,
 ) -> Result<HttpResponse, errors::ServiceError> {
-
     let req = req.into_inner().wash().parse::<Req>()?;
 
     let res_body = web::block(move || {
         let conn = pool.get().unwrap();
         match req {
-            Req::Cmd(cmd) => Ok(ResBody::Cmd(
-                match cmd {
-                    // TODO /alias
-                    ReqCmd::Help              => ResCmd::Help(cmd_help("root.md")?),
-                    ReqCmd::User(req)         => ResCmd::User(req.handle(&user, &conn)?),
-                    ReqCmd::Search(req)       => ResCmd::Search(req.handle(&user, &conn)?),
-                    ReqCmd::Tutorial          => ResCmd::Tutorial(cmd_help("tutorial.md")?),
-                    ReqCmd::Coffee            => return Err(errors::ServiceError::BadRequest("I'm a teapot.".into())),
+            Req::Cmd(cmd) => Ok(ResBody::Cmd(match cmd {
+                // TODO /alias
+                ReqCmd::Help => ResCmd::Help(cmd_help("root.md")?),
+                ReqCmd::User(req) => ResCmd::User(req.handle(&user, &conn)?),
+                ReqCmd::Search(req) => ResCmd::Search(req.handle(&user, &conn)?),
+                ReqCmd::Tutorial => ResCmd::Tutorial(cmd_help("tutorial.md")?),
+                ReqCmd::Coffee => {
+                    return Err(errors::ServiceError::BadRequest("I'm a teapot.".into()))
                 }
-            )),
+            })),
             Req::Tasks(tasks) => Ok(tasks.read(&user)?.accept(&user, &conn)?.upsert(&conn)?),
         }
-    }).await?;
+    })
+    .await?;
 
     Ok(HttpResponse::Ok().json(res_body))
 }
@@ -215,7 +212,8 @@ struct AltUser {
 }
 
 impl ReqUser {
-    fn handle(self,
+    fn handle(
+        self,
         user: &models::AuthedUser,
         conn: &models::Conn,
     ) -> Result<ResUser, errors::ServiceError> {
@@ -226,18 +224,23 @@ impl ReqUser {
         };
         Ok(res)
     }
-    fn info(&self,
+    fn info(
+        &self,
         user: &models::AuthedUser,
         conn: &models::Conn,
     ) -> Result<ResUser, errors::ServiceError> {
-        use crate::schema::tasks::dsl::{tasks, assign, is_archived};
-        use crate::schema::users::dsl::{users, created_at};
+        use crate::schema::tasks::dsl::{assign, is_archived, tasks};
+        use crate::schema::users::dsl::{created_at, users};
 
-        let since = users.find(user.id).select(created_at).first::<DateTime<Utc>>(conn)?;
+        let since = users
+            .find(user.id)
+            .select(created_at)
+            .first::<DateTime<Utc>>(conn)?;
         let executed = tasks
-        .filter(assign.eq(&user.id))
-        .filter(is_archived)
-        .count().get_result::<i64>(conn)? as i32;
+            .filter(assign.eq(&user.id))
+            .filter(is_archived)
+            .count()
+            .get_result::<i64>(conn)? as i32;
 
         Ok(ResUser::Info {
             since: since,
@@ -248,13 +251,14 @@ impl ReqUser {
 }
 
 impl ReqModify {
-    fn exec(self,
+    fn exec(
+        self,
         user: &models::AuthedUser,
         conn: &models::Conn,
     ) -> Result<ResModify, errors::ServiceError> {
-        use diesel::dsl::{select, exists};
-        use crate::schema::users::dsl::{users, email, name};
         use crate::schema::allocations::dsl::{allocations, owner};
+        use crate::schema::users::dsl::{email, name, users};
+        use diesel::dsl::{exists, select};
 
         if let Self::Allocations(req_alcs) = self {
             let mut ins = Vec::new();
@@ -262,8 +266,10 @@ impl ReqModify {
                 ins.push(alc.verify(user)?);
             }
             diesel::delete(allocations.filter(owner.eq(&user.id))).execute(conn)?;
-            diesel::insert_into(allocations).values(&ins).execute(conn)?;
-            return Ok(ResModify::Allocations(req_alcs))
+            diesel::insert_into(allocations)
+                .values(&ins)
+                .execute(conn)?;
+            return Ok(ResModify::Allocations(req_alcs));
         }
         let mut alt_user = AltUser {
             email: None,
@@ -277,30 +283,30 @@ impl ReqModify {
                     return Err(errors::ServiceError::BadRequest(format!(
                         "email already in use: {}",
                         s,
-                    )))
+                    )));
                 }
                 alt_user.email = Some(s.clone());
                 ResModify::Email(s)
-            },
+            }
             Self::Password(password_set) => {
                 let hash = password_set.verify(user, conn)?;
                 alt_user.hash = Some(hash);
                 ResModify::Password(())
-            },
+            }
             Self::Name(s) => {
                 if select(exists(users.filter(name.eq(&s)))).get_result(conn)? {
                     return Err(errors::ServiceError::BadRequest(format!(
                         "username already in use: {}",
                         s,
-                    )))
+                    )));
                 }
                 alt_user.name = Some(s.clone());
                 ResModify::Name(s)
-            },
+            }
             Self::Timescale(timescale) => {
                 alt_user.timescale = Some(timescale.as_str().into());
                 ResModify::Timescale(timescale.as_str().into())
-            },
+            }
             _ => unreachable!(),
         };
         diesel::update(user).set(&alt_user).execute(conn)?;
@@ -310,7 +316,8 @@ impl ReqModify {
 }
 
 impl PasswordSet {
-    fn verify(&self,
+    fn verify(
+        &self,
         user: &models::AuthedUser,
         conn: &models::Conn,
     ) -> Result<String, errors::ServiceError> {
@@ -322,20 +329,20 @@ impl PasswordSet {
             if min_password_len <= self.new.len() {
                 if self.new == self.confirmation {
                     let new_hash = utils::hash(&self.new)?;
-                    return Ok(new_hash)
+                    return Ok(new_hash);
                 }
                 return Err(errors::ServiceError::BadRequest(format!(
                     "new password mismatched with confirmation.",
-                )))
+                )));
             }
             return Err(errors::ServiceError::BadRequest(format!(
                 "password should be at least {} length.",
                 min_password_len,
-            )))
+            )));
         }
         return Err(errors::ServiceError::BadRequest(format!(
             "current password seems to be wrong.",
-        )))
+        )));
     }
 }
 
@@ -357,7 +364,8 @@ impl Timescale {
 }
 
 impl ReqAllocation {
-    fn verify(&self,
+    fn verify(
+        &self,
         user: &models::AuthedUser,
     ) -> Result<models::Allocation, errors::ServiceError> {
         if let Some(time) = NaiveTime::from_hms_opt(self.open_h as u32, self.open_m as u32, 0) {
@@ -366,16 +374,21 @@ impl ReqAllocation {
                     owner: user.id,
                     open: time,
                     hours: self.hours,
-                })
+                });
             }
-            return Err(errors::ServiceError::BadRequest("please specify 1 to 24 hours.".into()))
+            return Err(errors::ServiceError::BadRequest(
+                "please specify 1 to 24 hours.".into(),
+            ));
         }
-        Err(errors::ServiceError::BadRequest("time notation invalid.".into()))
+        Err(errors::ServiceError::BadRequest(
+            "time notation invalid.".into(),
+        ))
     }
 }
 
 impl ReqSearch {
-    fn handle(self,
+    fn handle(
+        self,
         user: &models::AuthedUser,
         conn: &models::Conn,
     ) -> Result<ResSearch, errors::ServiceError> {
@@ -388,7 +401,8 @@ impl ReqSearch {
 }
 
 impl Condition {
-    fn extract(&self,
+    fn extract(
+        &self,
         user: &models::AuthedUser,
         conn: &models::Conn,
     ) -> Result<Vec<models::ResTask>, errors::ServiceError> {
@@ -403,24 +417,26 @@ impl Condition {
         }
         Ok(res_tasks)
     }
-    fn query(&self,
+    fn query(
+        &self,
         user: &models::AuthedUser,
         conn: &models::Conn,
     ) -> Result<Vec<models::ResTask>, errors::ServiceError> {
-        use diesel::dsl::exists;
         use crate::schema::arrows::dsl::*;
         use crate::schema::permissions::dsl::*;
         use crate::schema::tasks::dsl::*;
-        use crate::schema::users::dsl::{users, name};
+        use crate::schema::users::dsl::{name, users};
+        use diesel::dsl::exists;
 
         let mut query = tasks
-        .filter(exists(permissions
-            .filter(subject.eq(&user.id))
-            .filter(object.eq(assign))
-        ))
-        .inner_join(users)
-        .select(models::SelTask::columns())
-        .into_boxed();
+            .filter(exists(
+                permissions
+                    .filter(subject.eq(&user.id))
+                    .filter(object.eq(assign)),
+            ))
+            .inner_join(users)
+            .select(models::SelTask::columns())
+            .into_boxed();
 
         if let Some(b) = &self.boolean.is_archived {
             query = query.filter(is_archived.eq(b))
@@ -429,14 +445,10 @@ impl Condition {
             query = query.filter(is_starred.eq(b))
         }
         if let Some(b) = &self.boolean.is_leaf {
-            query = query.filter(
-                exists(arrows.filter(target.eq(id))).eq(!b)
-            )
+            query = query.filter(exists(arrows.filter(target.eq(id))).eq(!b))
         }
         if let Some(b) = &self.boolean.is_root {
-            query = query.filter(
-                exists(arrows.filter(source.eq(id))).eq(!b)
-            )
+            query = query.filter(exists(arrows.filter(source.eq(id))).eq(!b))
         }
         if let Some(w) = &self.weight.0 {
             query = query.filter(weight.ge(w))
@@ -487,12 +499,11 @@ impl Condition {
             .order((is_starred.desc(), updated_at.desc()))
             .limit(100) // TODO limit extraction ?
             .load::<models::SelTask>(conn)?
-            .into_iter().map(|t| t.to_res()).collect()
-        )
+            .into_iter()
+            .map(|t| t.to_res())
+            .collect())
     }
-    fn filter_regex(&self,
-        tasks: &mut Vec<models::ResTask>,
-    ) -> Result<(), errors::ServiceError> {
+    fn filter_regex(&self, tasks: &mut Vec<models::ResTask>) -> Result<(), errors::ServiceError> {
         if let Some(Expression::Regex(regex)) = &self.title {
             let regex = Regex::new(&regex)?;
             tasks.retain(|t| regex.is_match(&t.title))
@@ -507,10 +518,7 @@ impl Condition {
         }
         Ok(())
     }
-    fn filter_context(&self,
-        tasks: &mut Vec<models::ResTask>,
-        arrows: &models::Arrows,
-    ) {
+    fn filter_context(&self, tasks: &mut Vec<models::ResTask>, arrows: &models::Arrows) {
         if let Some(id) = self.context.0 {
             let ids = models::Tid::from(id).nodes_to(models::LR::Root, arrows);
             tasks.retain(|t| ids.iter().any(|id| *id == t.id))
@@ -527,7 +535,7 @@ struct Acceptor {
     arrows: TmpArrows,
 }
 
-type TmpArrows =  models::Arrows;
+type TmpArrows = models::Arrows;
 
 struct TmpTask {
     id: Option<i32>,
@@ -541,24 +549,28 @@ struct TmpTask {
 }
 
 impl ReqTasks {
-    fn read(self,
-        user: &models::AuthedUser,
-    ) -> Result<Acceptor, errors::ServiceError> {
-        let iter =  self.tasks.iter().enumerate().rev();
+    fn read(self, user: &models::AuthedUser) -> Result<Acceptor, errors::ServiceError> {
+        let iter = self.tasks.iter().enumerate().rev();
         let mut tmp_arrows = Vec::new();
         for (src, t) in iter.clone() {
-            if let Some((tgt, _)) = iter.clone()
-            .filter(|(idx, _)| *idx < src)
-            .find(|(_, _t)| _t.indent < t.indent) {
+            if let Some((tgt, _)) = iter
+                .clone()
+                .filter(|(idx, _)| *idx < src)
+                .find(|(_, _t)| _t.indent < t.indent)
+            {
                 tmp_arrows.push(models::Arrow {
                     source: src as i32,
                     target: tgt as i32,
                 });
             }
             for (tgt, _) in iter.clone().filter(|(_, _t)| {
-                if let (Some(tail), Some(head)) = (&_t.attribute.joint_tail, &t.attribute.joint_head) {
+                if let (Some(tail), Some(head)) =
+                    (&_t.attribute.joint_tail, &t.attribute.joint_head)
+                {
                     tail == head
-                } else { false }
+                } else {
+                    false
+                }
             }) {
                 tmp_arrows.push(models::Arrow {
                     source: src as i32,
@@ -611,27 +623,32 @@ struct TmpTaskOk {
 }
 
 impl Acceptor {
-    fn accept(self,
+    fn accept(
+        self,
         user: &models::AuthedUser,
         conn: &models::Conn,
     ) -> Result<Upserter, errors::ServiceError> {
-
         self.no_loop()?;
         self.valid_sd()?;
         self.valid_tid_use()?;
         self.valid_tid(user, conn)?;
         let assigns = self.valid_assign(user, conn)?;
 
-        let tasks = self.tasks.into_iter().zip(assigns.iter()).map(|(t, &a)| TmpTaskOk {
-            id: t.id,
-            title: t.title,
-            assign: a,
-            is_starred: t.is_starred,
-            startable: t.startable,
-            deadline: t.deadline,
-            weight: t.weight,
-            link: t.link,
-        }).collect::<Vec<TmpTaskOk>>();
+        let tasks = self
+            .tasks
+            .into_iter()
+            .zip(assigns.iter())
+            .map(|(t, &a)| TmpTaskOk {
+                id: t.id,
+                title: t.title,
+                assign: a,
+                is_starred: t.is_starred,
+                startable: t.startable,
+                deadline: t.deadline,
+                weight: t.weight,
+                link: t.link,
+            })
+            .collect::<Vec<TmpTaskOk>>();
 
         Ok(Upserter {
             tasks: tasks,
@@ -640,18 +657,21 @@ impl Acceptor {
     }
     fn no_loop(&self) -> Result<(), errors::ServiceError> {
         if self.arrows.has_cycle() {
-            return Err(errors::ServiceError::BadRequest("loop found.".into()))
+            return Err(errors::ServiceError::BadRequest("loop found.".into()));
         }
         Ok(())
     }
     fn valid_sd(&self) -> Result<(), errors::ServiceError> {
-        if let Some(t) = self.tasks.iter()
-        .filter(|t| t.deadline.is_some() && t.startable.is_some())
-        .find(|t| t.deadline.unwrap() < t.startable.unwrap()) {
+        if let Some(t) = self
+            .tasks
+            .iter()
+            .filter(|t| t.deadline.is_some() && t.startable.is_some())
+            .find(|t| t.deadline.unwrap() < t.startable.unwrap())
+        {
             return Err(errors::ServiceError::BadRequest(format!(
                 "{}... deadline then startable.",
                 t.title.chars().take(8).collect::<String>(),
-            )))
+            )));
         }
         Ok(())
     }
@@ -671,7 +691,7 @@ impl Acceptor {
                 return Err(errors::ServiceError::BadRequest(format!(
                     "#{} appears multiple times.",
                     id,
-                )))
+                )));
             }
             last = id
         }
@@ -681,69 +701,78 @@ impl Acceptor {
         self.tasks.iter().filter_map(|t| t.id).collect::<Vec<i32>>()
     }
     fn tid_single_by(&self, path: &models::Path) -> Result<(), errors::ServiceError> {
-        let ids = path.iter().filter_map(|idx| self.tasks.get(*idx as usize).unwrap().id).collect::<Vec<i32>>();
+        let ids = path
+            .iter()
+            .filter_map(|idx| self.tasks.get(*idx as usize).unwrap().id)
+            .collect::<Vec<i32>>();
         if 1 < ids.len() {
             return Err(errors::ServiceError::BadRequest(format!(
                 "#{} -> #{} existing nodes wiring.",
                 ids.get(0).unwrap(),
                 ids.get(1).unwrap(),
-            )))
+            )));
         }
         Ok(())
     }
-    fn valid_tid(&self,
+    fn valid_tid(
+        &self,
         user: &models::AuthedUser,
         conn: &models::Conn,
     ) -> Result<(), errors::ServiceError> {
-        use diesel::dsl::exists;
         use crate::schema::permissions::dsl::*;
-        use crate::schema::tasks::dsl::{tasks, assign};
+        use crate::schema::tasks::dsl::{assign, tasks};
+        use diesel::dsl::exists;
 
         for id in self.ids() {
             if tasks
-            .find(id)
-            .filter(exists(permissions
-                .filter(subject.eq(&user.id))
-                .filter(object.eq(assign))
-                .filter(edit)
-            ))
-            .first::<models::Task>(conn)
-            .is_err() {
+                .find(id)
+                .filter(exists(
+                    permissions
+                        .filter(subject.eq(&user.id))
+                        .filter(object.eq(assign))
+                        .filter(edit),
+                ))
+                .first::<models::Task>(conn)
+                .is_err()
+            {
                 return Err(errors::ServiceError::BadRequest(format!(
                     "#{}: item not found, or no edit permission.",
                     id,
-                )))
+                )));
             }
         }
         Ok(())
     }
-    fn valid_assign(&self,
+    fn valid_assign(
+        &self,
         user: &models::AuthedUser,
         conn: &models::Conn,
     ) -> Result<Vec<i32>, errors::ServiceError> {
-        use diesel::dsl::exists;
         use crate::schema::permissions::dsl::*;
-        use crate::schema::users::dsl::{users, id, name};
+        use crate::schema::users::dsl::{id, name, users};
+        use diesel::dsl::exists;
 
         let mut assigns = Vec::new();
         for t in &self.tasks {
             let mut assign = user.id;
             if let Some(_name) = &t.assign {
                 match users
-                .filter(name.eq(&_name))
-                .filter(exists(permissions
-                    .filter(subject.eq(&user.id))
-                    .filter(object.eq(id))
-                    .filter(edit)
-                ))
-                .first::<models::User>(conn) {
+                    .filter(name.eq(&_name))
+                    .filter(exists(
+                        permissions
+                            .filter(subject.eq(&user.id))
+                            .filter(object.eq(id))
+                            .filter(edit),
+                    ))
+                    .first::<models::User>(conn)
+                {
                     Ok(someone) => assign = someone.id,
                     Err(_) => {
                         return Err(errors::ServiceError::BadRequest(format!(
                             "@{}: user not found.",
                             _name,
                         )))
-                    },
+                    }
                 }
             }
             assigns.push(assign)
@@ -777,9 +806,7 @@ struct AltTask {
 }
 
 impl Upserter {
-    fn upsert(mut self,
-        conn: &models::Conn,
-    ) -> Result<ResBody, errors::ServiceError> {
+    fn upsert(mut self, conn: &models::Conn) -> Result<ResBody, errors::ServiceError> {
         use crate::schema::arrows::dsl::arrows;
         use crate::schema::tasks::dsl::tasks;
 
@@ -789,15 +816,20 @@ impl Upserter {
         for t in self.tasks.into_iter() {
             let id = match t.id {
                 None => {
-                    let id = diesel::insert_into(tasks).values(&NewTask::from(t)).get_result::<models::Task>(conn)?.id;
+                    let id = diesel::insert_into(tasks)
+                        .values(&NewTask::from(t))
+                        .get_result::<models::Task>(conn)?
+                        .id;
                     created += 1;
                     id
-                },
+                }
                 Some(id) => {
-                    diesel::update(tasks.find(id)).set(&AltTask::from(t)).execute(conn)?;
+                    diesel::update(tasks.find(id))
+                        .set(&AltTask::from(t))
+                        .execute(conn)?;
                     updated += 1;
                     id
-                },
+                }
             };
             permanents.push(id)
         }
@@ -805,7 +837,9 @@ impl Upserter {
             arw.source = *permanents.get(arw.source as usize).unwrap();
             arw.target = *permanents.get(arw.target as usize).unwrap();
         }
-        diesel::insert_into(arrows).values(&self.arrows.arrows).execute(conn)?;
+        diesel::insert_into(arrows)
+            .values(&self.arrows.arrows)
+            .execute(conn)?;
 
         Ok(ResBody::Tasks {
             created: created,

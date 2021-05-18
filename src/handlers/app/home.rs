@@ -3,9 +3,9 @@ use chrono::{Date, DateTime, Duration, NaiveDateTime, Utc};
 use chrono_tz::Tz;
 use diesel::prelude::*;
 use gcollections::ops::{Bounded, Cardinality, Intersection};
+use interval::interval_set::IntervalSet;
 use interval::interval_set::ToIntervalSet;
-use interval::interval_set::{IntervalSet};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::cmp::{max, min};
 use std::collections::HashMap;
 
@@ -27,15 +27,13 @@ pub async fn home(
     user: models::AuthedUser,
     pool: web::Data<models::Pool>,
 ) -> Result<HttpResponse, errors::ServiceError> {
-
     let res_body = web::block(move || {
         let conn = pool.get().unwrap();
         let res_tasks = q.into_inner().config().query(&user, &conn)?;
 
-        Ok(ResBody {
-            tasks: res_tasks,
-        })
-    }).await?;
+        Ok(ResBody { tasks: res_tasks })
+    })
+    .await?;
 
     Ok(HttpResponse::Ok().json(res_body))
 }
@@ -52,20 +50,21 @@ impl Q {
     fn config(&self) -> Config {
         match self.option.as_deref() {
             Some("archives") => Config::Archives,
-            Some("roots")    => Config::Roots,
-            Some("leaves")   => Config::Leaves,
-            _                => Config::Home,
+            Some("roots") => Config::Roots,
+            Some("leaves") => Config::Leaves,
+            _ => Config::Home,
         }
     }
 }
 
 impl Config {
-    pub fn query(&self,
+    pub fn query(
+        &self,
         user: &models::AuthedUser,
         conn: &models::Conn,
     ) -> Result<Vec<models::ResTask>, errors::ServiceError> {
         use crate::schema::allocations::dsl::{allocations, owner};
-        use crate::schema::tasks::dsl::{tasks, assign, is_archived, is_starred, updated_at};
+        use crate::schema::tasks::dsl::{assign, is_archived, is_starred, tasks, updated_at};
         use crate::schema::users::dsl::users;
 
         let is_archives = *self == Self::Archives;
@@ -75,18 +74,20 @@ impl Config {
             .inner_join(users)
             .select(models::SelTask::columns());
         if is_archives {
-            return Ok(
-                _intermediate
+            return Ok(_intermediate
                 .order((is_starred.desc(), updated_at.desc()))
                 .limit(100)
                 .load::<models::SelTask>(conn)?
-                .into_iter().map(|t| t.to_res()).collect()
-            )
+                .into_iter()
+                .map(|t| t.to_res())
+                .collect());
         }
         let mut res_tasks = _intermediate
             .order(updated_at.desc())
             .load::<models::SelTask>(conn)?
-            .into_iter().map(|t| t.to_res()).collect();
+            .into_iter()
+            .map(|t| t.to_res())
+            .collect();
         let arrows = models::Arrows::among(&res_tasks, conn)?;
         let _allocations = allocations
             .filter(owner.eq(&user.id))
@@ -103,12 +104,8 @@ impl Config {
     }
     fn filter(&self, tasks: &mut Vec<models::ResTask>, arrows: &models::Arrows) {
         match self {
-            Self::Leaves => {
-                tasks.retain(|t| models::Tid::from(t.id).is(models::LR::Leaf, arrows))
-            },
-            Self::Roots => {
-                tasks.retain(|t| models::Tid::from(t.id).is(models::LR::Root, arrows))
-            },
+            Self::Leaves => tasks.retain(|t| models::Tid::from(t.id).is(models::LR::Leaf, arrows)),
+            Self::Roots => tasks.retain(|t| models::Tid::from(t.id).is(models::LR::Root, arrows)),
             _ => (),
         }
     }
@@ -147,13 +144,16 @@ impl Sorter {
     fn to_sub(&self, tasks: &Vec<models::ResTask>, arrows: models::Arrows) -> SubSorter {
         let mut map = HashMap::new();
         for t in tasks {
-            map.insert(t.id, SubTask {
-                startable: t.startable.map(|dt| self.splice(dt)),
-                deadline: t.deadline.map(|dt| self.splice(dt)),
-                priority: None,
-                weight: t.weight.map(|w| (w * 3600.0) as i64),
-                rank: None,
-            });
+            map.insert(
+                t.id,
+                SubTask {
+                    startable: t.startable.map(|dt| self.splice(dt)),
+                    deadline: t.deadline.map(|dt| self.splice(dt)),
+                    priority: None,
+                    weight: t.weight.map(|w| (w * 3600.0) as i64),
+                    rank: None,
+                },
+            );
         }
         SubSorter {
             cursor: 0,
@@ -163,43 +163,64 @@ impl Sorter {
         }
     }
     fn allocations_set(&self, date0: Date<Utc>, days: i64) -> IntervalSet<i64> {
-        (-1..=days+1).flat_map(|i| {
-            self.allocations.iter().map(move |alc| {
-                let open = date0.with_timezone(&self.tz).and_time(alc.open).unwrap() + Duration::days(i);
-                let close = open + Duration::hours(alc.hours as i64);
-                (open.timestamp(), close.timestamp())
+        (-1..=days + 1)
+            .flat_map(|i| {
+                self.allocations.iter().map(move |alc| {
+                    let open = date0.with_timezone(&self.tz).and_time(alc.open).unwrap()
+                        + Duration::days(i);
+                    let close = open + Duration::hours(alc.hours as i64);
+                    (open.timestamp(), close.timestamp())
+                })
             })
-        }).collect::<Vec<(i64, i64)>>().to_interval_set()
+            .collect::<Vec<(i64, i64)>>()
+            .to_interval_set()
     }
     fn daily(&self) -> i64 {
-        self.allocations.iter().map(|alc| alc.hours as i64).sum::<i64>() * 3600
+        self.allocations
+            .iter()
+            .map(|alc| alc.hours as i64)
+            .sum::<i64>()
+            * 3600
     }
     fn splice(&self, dt: DateTime<Utc>) -> i64 {
         let mut days = dt.signed_duration_since(self.now).num_days();
-        if dt < self.now { days -= 1 } // floor negative
+        if dt < self.now {
+            days -= 1
+        } // floor negative
         let adjust = {
             let approx = self.now + Duration::days(days);
             let allocations_set = self.allocations_set(approx.date(), 0);
-            (approx.timestamp(), dt.timestamp()).to_interval_set()
-            .intersection(&allocations_set).size() as i64
+            (approx.timestamp(), dt.timestamp())
+                .to_interval_set()
+                .intersection(&allocations_set)
+                .size() as i64
         };
         self.daily() * days + adjust
     }
     fn unsplice(&self, dt: i64) -> Option<DateTime<Utc>> {
         let daily = self.daily();
-        if  daily == 0 { return None }
+        if daily == 0 {
+            return None;
+        }
         let approx = self.now + Duration::days(dt / daily);
         let mut remain = dt % daily;
         let mut cursor = approx.timestamp();
         for alc in self.allocations_set(approx.date(), 0) {
-            if alc.upper() < cursor { continue }
+            if alc.upper() < cursor {
+                continue;
+            }
             let point = max(alc.lower(), cursor);
-            let draw =  min(alc.upper() - point, remain);
+            let draw = min(alc.upper() - point, remain);
             cursor = point + draw;
             remain -= draw;
-            if remain == 0 { break }
+            if remain == 0 {
+                break;
+            }
         }
-        Some(DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(cursor, 0), Utc))
+        Some(DateTime::<Utc>::from_utc(
+            NaiveDateTime::from_timestamp(cursor, 0),
+            Utc,
+        ))
     }
 }
 
@@ -246,21 +267,33 @@ impl SubSorter {
         }
     }
     fn winner(&self) -> Option<Player> {
-        self.startables().into_iter().map(|id| Player {
-            id: id,
-            priority: self.priority(id),
-        }).max_by_key(|player| player.priority)
+        self.startables()
+            .into_iter()
+            .map(|id| Player {
+                id: id,
+                priority: self.priority(id),
+            })
+            .max_by_key(|player| player.priority)
     }
     fn startables(&self) -> Vec<i32> {
-        self.entries.iter().copied()
-        .filter(|id| self.map[&id].startable.map(|t| t <= self.cursor).unwrap_or(true))
-        .filter(|id| models::Tid::from(*id).is(models::LR::Leaf, &self.arrows))
-        .collect::<Vec<i32>>()
+        self.entries
+            .iter()
+            .copied()
+            .filter(|id| {
+                self.map[&id]
+                    .startable
+                    .map(|t| t <= self.cursor)
+                    .unwrap_or(true)
+            })
+            .filter(|id| models::Tid::from(*id).is(models::LR::Leaf, &self.arrows))
+            .collect::<Vec<i32>>()
     }
     fn priority(&self, id: i32) -> Option<i64> {
-        self.paths(id).iter()
-        .map(|path| self.priority_by(path))
-        .max().unwrap_or_default()
+        self.paths(id)
+            .iter()
+            .map(|path| self.priority_by(path))
+            .max()
+            .unwrap_or_default()
     }
     fn priority_by(&self, path: &models::Path) -> Option<i64> {
         let mut cursor = i64::MAX;
@@ -271,7 +304,7 @@ impl SubSorter {
             cursor -= self.map[&id].weight.unwrap_or_default()
         }
         if cursor == i64::MAX {
-            return None
+            return None;
         }
         Some(self.cursor - cursor)
     }
@@ -281,7 +314,7 @@ impl SubSorter {
             while let Some(last) = path.pop() {
                 if self.map[&last].deadline.is_some() {
                     path.push(last);
-                    break
+                    break;
                 }
             }
         }
@@ -289,7 +322,6 @@ impl SubSorter {
         paths
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -308,18 +340,19 @@ mod tests {
         let mut sub = SubSorter {
             cursor: 0,
             entries: vec![0],
-            arrows: models::Arrows {
-                arrows: Vec::new(),
-            },
+            arrows: models::Arrows { arrows: Vec::new() },
             map: map,
         };
         sub.exec();
-        assert_eq!(sub.map[&0], SubTask {
-            startable: Some(0),
-            deadline: Some(120),
-            priority: Some(-240),
-            weight: Some(120),
-            rank: Some(0),
-        });
+        assert_eq!(
+            sub.map[&0],
+            SubTask {
+                startable: Some(0),
+                deadline: Some(120),
+                priority: Some(-240),
+                weight: Some(120),
+                rank: Some(0),
+            }
+        );
     }
 }

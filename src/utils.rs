@@ -3,8 +3,7 @@ use argon2;
 use crate::errors;
 
 lazy_static::lazy_static! {
-pub static ref SECRET_KEY: String = std::env::var("SECRET_KEY")
-    .unwrap_or_else(|_| "0123".repeat(8)); // TODO secret key
+    pub static ref SECRET_KEY: String = env_var("SECRET_KEY");
 }
 
 pub fn env_var(x: &str) -> String {
@@ -16,17 +15,15 @@ pub fn hash(password: &str) -> Result<String, errors::ServiceError> {
         password.as_bytes(),
         SECRET_KEY.as_bytes(),
         &argon2::Config::default(),
-    ).map_err(|err| {
+    )
+    .map_err(|err| {
         dbg!(err);
         errors::ServiceError::InternalServerError
     })
 }
 
 pub fn verify(hash: &str, password: &str) -> Result<bool, errors::ServiceError> {
-    argon2::verify_encoded(
-        hash,
-        password.as_bytes(),
-    ).map_err(|err| {
+    argon2::verify_encoded(hash, password.as_bytes()).map_err(|err| {
         dbg!(err);
         errors::ServiceError::InternalServerError
     })

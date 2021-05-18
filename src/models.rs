@@ -4,7 +4,7 @@ use chrono_tz::Tz;
 use diesel::prelude::*;
 use diesel::{r2d2::ConnectionManager, PgConnection};
 use futures::future::{err, ok, Ready};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::ops::Not;
 
@@ -90,7 +90,7 @@ impl FromRequest for AuthedUser {
         use actix_identity::RequestIdentity;
         if let Some(identity) = req.get_identity() {
             if let Ok(user) = serde_json::from_str::<Self>(&identity) {
-                return ok(user)
+                return ok(user);
             }
         }
         err(errors::ServiceError::Unauthorized.into())
@@ -148,17 +148,19 @@ impl Selectable for SelTask {
         tasks::weight,
         tasks::link,
     );
-    fn columns() -> Self::Columns {(
-        tasks::id,
-        tasks::title,
-        users::name,
-        tasks::is_archived,
-        tasks::is_starred,
-        tasks::startable,
-        tasks::deadline,
-        tasks::weight,
-        tasks::link,
-    )}
+    fn columns() -> Self::Columns {
+        (
+            tasks::id,
+            tasks::title,
+            users::name,
+            tasks::is_archived,
+            tasks::is_starred,
+            tasks::startable,
+            tasks::deadline,
+            tasks::weight,
+            tasks::link,
+        )
+    }
 }
 
 impl SelTask {
@@ -194,7 +196,9 @@ impl Arrows {
     pub fn map_to(&self, lr: LR) -> HashMap<i32, Vec<i32>> {
         let mut map: HashMap<i32, Vec<i32>> = HashMap::new();
         for arw in self.arrows.iter() {
-            map.entry(arw.trace_to(!lr)).or_default().push(arw.trace_to(lr));
+            map.entry(arw.trace_to(!lr))
+                .or_default()
+                .push(arw.trace_to(lr));
         }
         map
     }
@@ -252,9 +256,10 @@ impl Tid {
         let mut cursor = self.id;
         let mut path: Vec<i32> = Vec::new();
         'main: loop {
-            if path.contains(&cursor) { // got cycle instead of path
+            if path.contains(&cursor) {
+                // got cycle instead of path
                 results.clear();
-                break
+                break;
             }
             path.push(cursor);
             if let Some(destinations) = map.get(&cursor) {
@@ -263,7 +268,7 @@ impl Tid {
                     remains.push(cursor);
                     re_map.insert(cursor, destinations);
                     cursor = dest;
-                    continue
+                    continue;
                 }
             }
             results.push(Path::from(path.clone()));
@@ -275,15 +280,19 @@ impl Tid {
                 if let Some(dest) = re_map.get_mut(&cursor).unwrap().pop() {
                     remains.push(cursor);
                     cursor = dest;
-                    continue 'main
+                    continue 'main;
                 }
             }
-            break
+            break;
         }
         results
     }
     pub fn nodes_to(&self, lr: LR, arrows: &Arrows) -> Vec<i32> {
-        let mut nodes = self.paths_to(lr, arrows).into_iter().flatten().collect::<Vec<i32>>();
+        let mut nodes = self
+            .paths_to(lr, arrows)
+            .into_iter()
+            .flatten()
+            .collect::<Vec<i32>>();
         nodes.sort();
         nodes.dedup();
         nodes
@@ -291,10 +300,7 @@ impl Tid {
 }
 
 impl Arrows {
-    pub fn among(
-        tasks: &Vec<ResTask>,
-        conn: &Conn,
-    ) -> Result<Self, errors::ServiceError> {
+    pub fn among(tasks: &Vec<ResTask>, conn: &Conn) -> Result<Self, errors::ServiceError> {
         use crate::schema::arrows::dsl::*;
 
         let ids = tasks.iter().map(|t| t.id).collect::<Vec<i32>>();
@@ -302,14 +308,19 @@ impl Arrows {
             .filter(source.eq_any(&ids))
             .filter(target.eq_any(&ids))
             .load::<Arrow>(conn)?
-            .into()
-        )
+            .into())
     }
     pub fn paths(&self) -> Vec<Path> {
-        self.list(LR::Leaf).iter().flat_map(|leaf| Tid::from(*leaf).paths_to(LR::Root, &self)).collect()
+        self.list(LR::Leaf)
+            .iter()
+            .flat_map(|leaf| Tid::from(*leaf).paths_to(LR::Root, &self))
+            .collect()
     }
     pub fn list(&self, lr: LR) -> Vec<i32> {
-        self.nodes().into_iter().filter(|id| Tid::from(*id).is(lr, &self)).collect()
+        self.nodes()
+            .into_iter()
+            .filter(|id| Tid::from(*id).is(lr, &self))
+            .collect()
     }
     pub fn nodes(&self) -> Vec<i32> {
         let mut ids = Vec::new();
@@ -323,12 +334,14 @@ impl Arrows {
     }
     pub fn has_cycle(&self) -> bool {
         if self.arrows.is_empty() {
-            return false
+            return false;
         }
         if self.list(LR::Leaf).is_empty() || self.list(LR::Root).is_empty() {
-            return true
+            return true;
         }
-        self.list(LR::Leaf).iter().any(|leaf| Tid::from(*leaf).paths_to(LR::Root, &self).is_empty())
+        self.list(LR::Leaf)
+            .iter()
+            .any(|leaf| Tid::from(*leaf).paths_to(LR::Root, &self).is_empty())
     }
 }
 
@@ -361,7 +374,7 @@ impl EasyDateTime {
             Some(date) => date.complete(&mut inherit, &now),
         };
         if let (Some(date), Some(time)) = (date_opt, time_opt) {
-            return Some(NaiveDateTime::new(date, time))
+            return Some(NaiveDateTime::new(date, time));
         }
         None
     }
@@ -370,12 +383,18 @@ impl EasyTime {
     fn complete(&self, inherit: &mut bool, now: &NaiveDateTime) -> Option<NaiveTime> {
         let m = match self.m {
             None => 0,
-            Some(m) => { *inherit = true; m as u32},
+            Some(m) => {
+                *inherit = true;
+                m as u32
+            }
         };
         let h = match self.h {
             None if *inherit => now.format("%H").to_string().parse::<u32>().unwrap(),
             None => 0,
-            Some(h) => { *inherit = true; h as u32},
+            Some(h) => {
+                *inherit = true;
+                h as u32
+            }
         };
         NaiveTime::from_hms_opt(h, m, 0)
     }
@@ -385,33 +404,42 @@ impl EasyDate {
         let d = match self.d {
             None if *inherit => now.format("%d").to_string().parse::<u32>().unwrap(),
             None => 1,
-            Some(d) => { *inherit = true; d as u32},
+            Some(d) => {
+                *inherit = true;
+                d as u32
+            }
         };
         let m = match self.m {
             None if *inherit => now.format("%m").to_string().parse::<u32>().unwrap(),
             None => 1,
-            Some(m) => { *inherit = true; m as u32},
+            Some(m) => {
+                *inherit = true;
+                m as u32
+            }
         };
-        let y = self.y.unwrap_or(
-            now.format("%Y").to_string().parse::<i32>().unwrap()
-        );
+        let y = self
+            .y
+            .unwrap_or(now.format("%Y").to_string().parse::<i32>().unwrap());
         NaiveDate::from_ymd_opt(y, m, d)
     }
 }
 impl AuthedUser {
-    pub fn globalize(&self, easy: &EasyDateTime
-    ) -> Result<DateTime<Utc>, errors::ServiceError> {
+    pub fn globalize(&self, easy: &EasyDateTime) -> Result<DateTime<Utc>, errors::ServiceError> {
         let lower = Utc.ymd(1000, 1, 1).and_hms(0, 0, 0);
         let upper = Utc.ymd(9999, 1, 1).and_hms(0, 0, 0);
         if let Some(local) = easy.complete(&self.tz) {
             if let Some(dt) = self.tz.from_local_datetime(&local).single() {
                 if lower < dt && dt < upper {
-                    return Ok(dt.with_timezone(&Utc))
+                    return Ok(dt.with_timezone(&Utc));
                 }
-                return Err(errors::ServiceError::BadRequest("some dates are out of range.".into()))
+                return Err(errors::ServiceError::BadRequest(
+                    "some dates are out of range.".into(),
+                ));
             }
         }
-        Err(errors::ServiceError::BadRequest("failed to interpret datetime.".into()))
+        Err(errors::ServiceError::BadRequest(
+            "failed to interpret datetime.".into(),
+        ))
     }
     pub fn localize(&self, dt: &DateTime<Utc>) -> String {
         let local = dt.with_timezone(&self.tz).naive_local();
@@ -420,16 +448,10 @@ impl AuthedUser {
 }
 
 impl Selectable for Allocation {
-    type Columns = (
-        allocations::owner,
-        allocations::open,
-        allocations::hours,
-    );
-    fn columns() -> Self::Columns {(
-        allocations::owner,
-        allocations::open,
-        allocations::hours,
-    )}
+    type Columns = (allocations::owner, allocations::open, allocations::hours);
+    fn columns() -> Self::Columns {
+        (allocations::owner, allocations::open, allocations::hours)
+    }
 }
 #[derive(Debug, PartialEq, Serialize)]
 pub struct ResAllocation {

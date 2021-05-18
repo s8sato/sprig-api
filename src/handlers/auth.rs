@@ -2,7 +2,7 @@ use actix_identity::Identity;
 use actix_web::{web, HttpResponse};
 use chrono_tz::Tz;
 use diesel::prelude::*;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use crate::errors;
 use crate::models::{self, Selectable};
@@ -28,11 +28,11 @@ pub async fn login(
     id: Identity,
     pool: web::Data<models::Pool>,
 ) -> Result<HttpResponse, errors::ServiceError> {
-
     let authed_user = web::block(move || {
         let conn = pool.get().unwrap();
         req.into_inner().to_authed(&conn)
-    }).await?;
+    })
+    .await?;
 
     let identity = serde_json::to_string(&authed_user).unwrap();
     id.remember(identity);
@@ -43,11 +43,11 @@ pub async fn get_me(
     user: models::AuthedUser,
     pool: web::Data<models::Pool>,
 ) -> Result<HttpResponse, errors::ServiceError> {
-
     let res_body = web::block(move || {
         let conn = pool.get().unwrap();
         user.to_res(&conn)
-    }).await?;
+    })
+    .await?;
 
     Ok(HttpResponse::Ok().json(&res_body))
 }
@@ -58,18 +58,18 @@ pub async fn logout(id: Identity) -> HttpResponse {
 }
 
 impl ReqBody {
-    fn to_authed(&self, conn: &models::Conn
-    ) -> Result<models::AuthedUser, errors::ServiceError> {
-        use crate::schema::users::dsl::{users, email};
+    fn to_authed(&self, conn: &models::Conn) -> Result<models::AuthedUser, errors::ServiceError> {
+        use crate::schema::users::dsl::{email, users};
 
         if let Ok(user) = users
-        .filter(email.eq(&self.email))
-        .first::<models::User>(conn) {
+            .filter(email.eq(&self.email))
+            .first::<models::User>(conn)
+        {
             if utils::verify(&user.hash, &self.password)? {
-                return Ok(models::AuthedUser { 
+                return Ok(models::AuthedUser {
                     id: user.id,
                     tz: self.tz,
-                })
+                });
             }
         }
         Err(errors::ServiceError::Unauthorized)
@@ -77,18 +77,18 @@ impl ReqBody {
 }
 
 impl models::AuthedUser {
-    fn to_res(&self,
-        conn: &models::Conn,
-    ) -> Result<ResBody, errors::ServiceError> {
-        use crate::schema::users::dsl::users;
+    fn to_res(&self, conn: &models::Conn) -> Result<ResBody, errors::ServiceError> {
         use crate::schema::allocations::dsl::{allocations, owner};
+        use crate::schema::users::dsl::users;
 
         let user = users.find(self.id).first::<models::User>(conn)?;
         let _allocations = allocations
-        .filter(owner.eq(&self.id))
-        .select(models::Allocation::columns())
-        .load::<models::Allocation>(conn)?
-        .into_iter().map(|alc| alc.into()).collect::<Vec<models::ResAllocation>>();
+            .filter(owner.eq(&self.id))
+            .select(models::Allocation::columns())
+            .load::<models::Allocation>(conn)?
+            .into_iter()
+            .map(|alc| alc.into())
+            .collect::<Vec<models::ResAllocation>>();
 
         Ok(ResBody {
             name: user.name,

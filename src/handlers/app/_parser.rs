@@ -1,17 +1,17 @@
-use combine::{
-    Parser, Stream, attempt, choice, eof, from_str, many, many1,
-    optional, parser, satisfy, sep_by1, skip_many, skip_many1, token,
-};
 use combine::parser::{
     char::{digit, newline, space, string},
     combinator::recognize,
     repeat::{skip_count_min_max, take_until},
 };
+use combine::{
+    attempt, choice, eof, from_str, many, many1, optional, parser, satisfy, sep_by1, skip_many,
+    skip_many1, token, Parser, Stream,
+};
 use std::str::FromStr;
 
+use super::text::{self, *};
 use crate::errors;
 use crate::models;
-use super::text::{self, *};
 
 impl FromStr for Req {
     type Err = errors::ServiceError;
@@ -20,10 +20,17 @@ impl FromStr for Req {
         let req = req_().parse(s)?.0;
         if let Req::Tasks(ts) = &req {
             if ts.tasks.iter().any(|t| t.attribute.title.is_empty()) {
-                return Err(Self::Err::BadRequest("there is a item with no title.".into()))
+                return Err(Self::Err::BadRequest(
+                    "there is a item with no title.".into(),
+                ));
             }
-            if ts.tasks.iter().filter_map(|t| t.attribute.weight).any(|w| !(w < 10_000.)) {
-                return Err(Self::Err::BadRequest("there is a too heavy item.".into()))
+            if ts
+                .tasks
+                .iter()
+                .filter_map(|t| t.attribute.weight)
+                .any(|w| !(w < 10_000.))
+            {
+                return Err(Self::Err::BadRequest("there is a too heavy item.".into()));
             }
         }
         Ok(req)
@@ -32,14 +39,13 @@ impl FromStr for Req {
 
 impl text::ReqBody {
     pub fn wash(&self) -> String {
-        self
-        .remove_comments()
-        .trim()
-        .lines()
-        .map(|s| s.trim_end().to_string())
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<String>>()
-        .join("\n")
+        self.remove_comments()
+            .trim()
+            .lines()
+            .map(|s| s.trim_end().to_string())
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<String>>()
+            .join("\n")
     }
     fn remove_comments(&self) -> String {
         let prefix = "<!--";
@@ -51,10 +57,15 @@ impl text::ReqBody {
             let pair = src.split_at(cursor);
             res.push_str(pair.0);
             src = pair.1;
-            let cursor = src.find(suffix).map(|cur| cur + suffix.len()).unwrap_or_else(|| src.len());
+            let cursor = src
+                .find(suffix)
+                .map(|cur| cur + suffix.len())
+                .unwrap_or_else(|| src.len());
             let pair = src.split_at(cursor);
             src = pair.1;
-            if src.is_empty() { break }
+            if src.is_empty() {
+                break;
+            }
         }
         res
     }
@@ -215,18 +226,36 @@ parser! {
 }
 // TODO enum ConditionItem
 impl std::iter::Extend<Self> for Condition {
-    fn extend<T: IntoIterator<Item=Self>>(&mut self, iter: T) {
+    fn extend<T: IntoIterator<Item = Self>>(&mut self, iter: T) {
         for item in iter {
             self.boolean.extend(std::iter::once(item.boolean));
-            if self.context.lt(&item.context) { self.context = item.context };
-            if self.weight.lt(&item.weight) { self.weight = item.weight };
-            if self.startable.lt(&item.startable) { self.startable = item.startable };
-            if self.deadline.lt(&item.deadline) { self.deadline = item.deadline };
-            if self.created_at.lt(&item.created_at) { self.created_at = item.created_at };
-            if self.updated_at.lt(&item.updated_at) { self.updated_at = item.updated_at };
-            if self.title.lt(&item.title) { self.title = item.title };
-            if self.assign.lt(&item.assign) { self.assign = item.assign };
-            if self.link.lt(&item.link) { self.link = item.link };
+            if self.context.lt(&item.context) {
+                self.context = item.context
+            };
+            if self.weight.lt(&item.weight) {
+                self.weight = item.weight
+            };
+            if self.startable.lt(&item.startable) {
+                self.startable = item.startable
+            };
+            if self.deadline.lt(&item.deadline) {
+                self.deadline = item.deadline
+            };
+            if self.created_at.lt(&item.created_at) {
+                self.created_at = item.created_at
+            };
+            if self.updated_at.lt(&item.updated_at) {
+                self.updated_at = item.updated_at
+            };
+            if self.title.lt(&item.title) {
+                self.title = item.title
+            };
+            if self.assign.lt(&item.assign) {
+                self.assign = item.assign
+            };
+            if self.link.lt(&item.link) {
+                self.link = item.link
+            };
         }
     }
 }
@@ -286,12 +315,20 @@ parser! {
 }
 // TODO enum BooleanItem
 impl std::iter::Extend<Self> for Boolean {
-    fn extend<T: IntoIterator<Item=Self>>(&mut self, iter: T) {
+    fn extend<T: IntoIterator<Item = Self>>(&mut self, iter: T) {
         for item in iter {
-            if self.is_archived.lt(&item.is_archived) { self.is_archived = item.is_archived };
-            if self.is_starred.lt(&item.is_starred) { self.is_starred = item.is_starred };
-            if self.is_leaf.lt(&item.is_leaf) { self.is_leaf = item.is_leaf };
-            if self.is_root.lt(&item.is_root) { self.is_root = item.is_root };
+            if self.is_archived.lt(&item.is_archived) {
+                self.is_archived = item.is_archived
+            };
+            if self.is_starred.lt(&item.is_starred) {
+                self.is_starred = item.is_starred
+            };
+            if self.is_leaf.lt(&item.is_leaf) {
+                self.is_leaf = item.is_leaf
+            };
+            if self.is_root.lt(&item.is_root) {
+                self.is_root = item.is_root
+            };
         }
     }
 }
@@ -380,7 +417,7 @@ parser! {
     }
 }
 impl std::iter::Extend<Indent> for i32 {
-    fn extend<T: IntoIterator<Item=Indent>>(&mut self, iter: T) {
+    fn extend<T: IntoIterator<Item = Indent>>(&mut self, iter: T) {
         for _ in iter {
             *self += 1;
         }
@@ -388,16 +425,32 @@ impl std::iter::Extend<Indent> for i32 {
 }
 // TODO enum AttributeItem
 impl std::iter::Extend<Self> for Attribute {
-    fn extend<T: IntoIterator<Item=Self>>(&mut self, iter: T) {
+    fn extend<T: IntoIterator<Item = Self>>(&mut self, iter: T) {
         for item in iter {
-            if item.is_starred { self.is_starred = true };
-            if let Some(x) = item.id { self.id = Some(x) };
-            if let Some(x) = item.weight { self.weight = Some(x) };
-            if let Some(x) = item.joint_head { self.joint_head = Some(x) };
-            if let Some(x) = item.joint_tail { self.joint_tail = Some(x) };
-            if let Some(x) = item.assign { self.assign = Some(x) };
-            if let Some(x) = item.startable { self.startable = Some(x) };
-            if let Some(x) = item.deadline { self.deadline = Some(x) };
+            if item.is_starred {
+                self.is_starred = true
+            };
+            if let Some(x) = item.id {
+                self.id = Some(x)
+            };
+            if let Some(x) = item.weight {
+                self.weight = Some(x)
+            };
+            if let Some(x) = item.joint_head {
+                self.joint_head = Some(x)
+            };
+            if let Some(x) = item.joint_tail {
+                self.joint_tail = Some(x)
+            };
+            if let Some(x) = item.assign {
+                self.assign = Some(x)
+            };
+            if let Some(x) = item.startable {
+                self.startable = Some(x)
+            };
+            if let Some(x) = item.deadline {
+                self.deadline = Some(x)
+            };
             if !item.title.is_empty() {
                 if !self.title.is_empty() {
                     self.title.push(' ');
@@ -578,16 +631,15 @@ mod tests {
     #[test]
     fn t_washer_remove_comments() {
         let t_00 = req_body().remove_comments();
-        assert_eq!(t_00, String::from(
-            " \n\r\n pon  \n\r\n   \n\r\n pon  \n\r\n -->  \n\r\n pon  \n\r\n "
-        ));
+        assert_eq!(
+            t_00,
+            String::from(" \n\r\n pon  \n\r\n   \n\r\n pon  \n\r\n -->  \n\r\n pon  \n\r\n ")
+        );
     }
     #[test]
     fn t_washer_wash() {
         let t_00 = req_body().wash();
-        assert_eq!(t_00, String::from(
-            "pon\n pon\n -->\n pon"
-        ));
+        assert_eq!(t_00, String::from("pon\n pon\n -->\n pon"));
     }
     #[test]
     fn t_req_() {
@@ -612,7 +664,13 @@ mod tests {
         assert_eq!(t_02, Ok((ReqCmd::Search(ReqSearch::Help), "")));
         assert_eq!(t_03, Ok((ReqCmd::Tutorial, "")));
         assert_eq!(t_04, Ok((ReqCmd::Coffee, "")));
-        assert_eq!(t_05, Ok((ReqCmd::Search(ReqSearch::Condition(Condition::default())), "")));
+        assert_eq!(
+            t_05,
+            Ok((
+                ReqCmd::Search(ReqSearch::Condition(Condition::default())),
+                ""
+            ))
+        );
         assert!(t_10.is_err());
         assert!(t_11.is_err());
         assert!(t_12.is_err());
@@ -628,25 +686,33 @@ mod tests {
         let t_10 = req_modify_().easy_parse("");
         let t_11 = req_modify_().easy_parse(" ");
         let t_12 = req_modify_().easy_parse("x");
-        assert_eq!(t_00, Ok((ReqModify::Name(String::from("satun__")), "   etc...   ")));
+        assert_eq!(
+            t_00,
+            Ok((ReqModify::Name(String::from("satun__")), "   etc...   "))
+        );
         assert!(t_10.is_err());
         assert!(t_11.is_err());
         assert!(t_12.is_err());
     }
     #[test]
     fn t_password_set_() {
-        let t_00 = password_set_().easy_parse(
-            r##"old!"#$%&'()*+,-./   new0123456789   confirmation:;<=>?@   etc..."##
-        );
+        let t_00 = password_set_()
+            .easy_parse(r##"old!"#$%&'()*+,-./   new0123456789   confirmation:;<=>?@   etc..."##);
         let t_10 = password_set_().easy_parse("");
         let t_11 = password_set_().easy_parse("   old new confirmation");
         let t_12 = password_set_().easy_parse("old new_without_confirmation");
         let t_13 = password_set_().easy_parse("ぱすわーどに　和文字　とな？");
-        assert_eq!(t_00, Ok((PasswordSet {
-            old: String::from(r##"old!"#$%&'()*+,-./"##),
-            new: String::from(r##"new0123456789"##),
-            confirmation: String::from(r##"confirmation:;<=>?@"##),
-        }, "   etc...")));
+        assert_eq!(
+            t_00,
+            Ok((
+                PasswordSet {
+                    old: String::from(r##"old!"#$%&'()*+,-./"##),
+                    new: String::from(r##"new0123456789"##),
+                    confirmation: String::from(r##"confirmation:;<=>?@"##),
+                },
+                "   etc..."
+            ))
+        );
         assert!(t_10.is_err());
         assert!(t_11.is_err());
         assert!(t_12.is_err());
@@ -668,160 +734,168 @@ mod tests {
     #[test]
     fn t_condition_() {
         let t_02 = condition_().easy_parse("# $");
-        let t_03 = condition_().easy_parse(
-            r##"333<#<777 -a!s -l .5<$<24 s<15: /12/<d c 2021//<u<//30T6:"##
-        );
+        let t_03 = condition_()
+            .easy_parse(r##"333<#<777 -a!s -l .5<$<24 s<15: /12/<d c 2021//<u<//30T6:"##);
         let t_04 = condition_().easy_parse(
             r##"333<#<777 -a!s -l .5<$<24 s<15: /12/<d c 2021//<u<//30T6: "tit le" @r#"double"quoted"man"# &r".*domain\.com.*\?page=[1-5]#(frag|ment)""##
         );
         let t_10 = condition_().easy_parse(" title");
         let t_11 = condition_().easy_parse(" ");
         let t_12 = condition_().easy_parse("");
-        assert_eq!(t_02, Ok((
-            Condition {
-                boolean: Boolean {
-                    is_archived: None,
-                    is_starred: None,
-                    is_leaf: None,
-                    is_root: None,
+        assert_eq!(
+            t_02,
+            Ok((
+                Condition {
+                    boolean: Boolean {
+                        is_archived: None,
+                        is_starred: None,
+                        is_leaf: None,
+                        is_root: None,
+                    },
+                    context: (None, None),
+                    weight: (None, None),
+                    startable: (None, None),
+                    deadline: (None, None),
+                    created_at: (None, None),
+                    updated_at: (None, None),
+                    title: None,
+                    assign: None,
+                    link: None,
                 },
-                context: (None, None),
-                weight: (None, None),
-                startable: (None, None),
-                deadline: (None, None),
-                created_at: (None, None),
-                updated_at: (None, None),
-                title:  None,
-                assign: None,
-                link: None,
-            },
-            ""
-        )));
-        assert_eq!(t_03, Ok((
-            Condition {
-                boolean: Boolean {
-                    is_archived: Some(true),
-                    is_starred: Some(false),
-                    is_leaf: Some(true),
-                    is_root: None,
+                ""
+            ))
+        );
+        assert_eq!(
+            t_03,
+            Ok((
+                Condition {
+                    boolean: Boolean {
+                        is_archived: Some(true),
+                        is_starred: Some(false),
+                        is_leaf: Some(true),
+                        is_root: None,
+                    },
+                    context: (Some(333), Some(777)),
+                    weight: (Some(0.5), Some(24.0)),
+                    startable: (
+                        None,
+                        Some(models::EasyDateTime {
+                            date: None,
+                            time: Some(models::EasyTime {
+                                h: Some(15),
+                                m: None,
+                            }),
+                        })
+                    ),
+                    deadline: (
+                        Some(models::EasyDateTime {
+                            date: Some(models::EasyDate {
+                                y: None,
+                                m: Some(12),
+                                d: None,
+                            }),
+                            time: None,
+                        }),
+                        None
+                    ),
+                    created_at: (None, None),
+                    updated_at: (
+                        Some(models::EasyDateTime {
+                            date: Some(models::EasyDate {
+                                y: Some(2021),
+                                m: None,
+                                d: None,
+                            }),
+                            time: None,
+                        }),
+                        Some(models::EasyDateTime {
+                            date: Some(models::EasyDate {
+                                y: None,
+                                m: None,
+                                d: Some(30),
+                            }),
+                            time: Some(models::EasyTime {
+                                h: Some(6),
+                                m: None,
+                            }),
+                        })
+                    ),
+                    title: None,
+                    assign: None,
+                    link: None,
                 },
-                context: (Some(333), Some(777)),
-                weight: (Some(0.5), Some(24.0)),
-                startable: (
-                    None,
-                    Some(models::EasyDateTime {
-                        date: None,
-                        time: Some(models::EasyTime {
-                            h: Some(15),
-                            m: None,
+                ""
+            ))
+        );
+        assert_eq!(
+            t_04,
+            Ok((
+                Condition {
+                    boolean: Boolean {
+                        is_archived: Some(true),
+                        is_starred: Some(false),
+                        is_leaf: Some(true),
+                        is_root: None,
+                    },
+                    context: (Some(333), Some(777)),
+                    weight: (Some(0.5), Some(24.0)),
+                    startable: (
+                        None,
+                        Some(models::EasyDateTime {
+                            date: None,
+                            time: Some(models::EasyTime {
+                                h: Some(15),
+                                m: None,
+                            }),
+                        })
+                    ),
+                    deadline: (
+                        Some(models::EasyDateTime {
+                            date: Some(models::EasyDate {
+                                y: None,
+                                m: Some(12),
+                                d: None,
+                            }),
+                            time: None,
                         }),
-                    })
-                ),
-                deadline: (
-                    Some(models::EasyDateTime {
-                        date: Some(models::EasyDate {
-                            y: None,
-                            m: Some(12),
-                            d: None,
+                        None
+                    ),
+                    created_at: (None, None),
+                    updated_at: (
+                        Some(models::EasyDateTime {
+                            date: Some(models::EasyDate {
+                                y: Some(2021),
+                                m: None,
+                                d: None,
+                            }),
+                            time: None,
                         }),
-                        time: None,
-                    }),
-                    None
-                ),
-                created_at: (None, None),
-                updated_at: (
-                    Some(models::EasyDateTime {
-                        date: Some(models::EasyDate {
-                            y: Some(2021),
-                            m: None,
-                            d: None,
-                        }),
-                        time: None,
-                    }),
-                    Some(models::EasyDateTime {
-                        date: Some(models::EasyDate {
-                            y: None,
-                            m: None,
-                            d: Some(30),
-                        }),
-                        time: Some(models::EasyTime {
-                            h: Some(6),
-                            m: None,
-                        }),
-                    })
-                ),
-                title: None,
-                assign: None,
-                link: None,
-            },
-            ""
-        )));
-        assert_eq!(t_04, Ok((
-            Condition {
-                boolean: Boolean {
-                    is_archived: Some(true),
-                    is_starred: Some(false),
-                    is_leaf: Some(true),
-                    is_root: None,
+                        Some(models::EasyDateTime {
+                            date: Some(models::EasyDate {
+                                y: None,
+                                m: None,
+                                d: Some(30),
+                            }),
+                            time: Some(models::EasyTime {
+                                h: Some(6),
+                                m: None,
+                            }),
+                        })
+                    ),
+                    title: Some(text::Expression::Words(vec![
+                        String::from("tit"),
+                        String::from("le"),
+                    ])),
+                    assign: Some(text::Expression::Regex(String::from(
+                        r#"double"quoted"man"#
+                    ))),
+                    link: Some(text::Expression::Regex(String::from(
+                        r".*domain\.com.*\?page=[1-5]#(frag|ment)"
+                    ))),
                 },
-                context: (Some(333), Some(777)),
-                weight: (Some(0.5), Some(24.0)),
-                startable: (
-                    None,
-                    Some(models::EasyDateTime {
-                        date: None,
-                        time: Some(models::EasyTime {
-                            h: Some(15),
-                            m: None,
-                        }),
-                    })
-                ),
-                deadline: (
-                    Some(models::EasyDateTime {
-                        date: Some(models::EasyDate {
-                            y: None,
-                            m: Some(12),
-                            d: None,
-                        }),
-                        time: None,
-                    }),
-                    None
-                ),
-                created_at: (None, None),
-                updated_at: (
-                    Some(models::EasyDateTime {
-                        date: Some(models::EasyDate {
-                            y: Some(2021),
-                            m: None,
-                            d: None,
-                        }),
-                        time: None,
-                    }),
-                    Some(models::EasyDateTime {
-                        date: Some(models::EasyDate {
-                            y: None,
-                            m: None,
-                            d: Some(30),
-                        }),
-                        time: Some(models::EasyTime {
-                            h: Some(6),
-                            m: None,
-                        }),
-                    })
-                ),
-                title: Some(text::Expression::Words(vec![
-                    String::from("tit"),
-                    String::from("le"),
-                ])),
-                assign: Some(text::Expression::Regex(
-                    String::from(r#"double"quoted"man"#)
-                )),
-                link: Some(text::Expression::Regex(
-                    String::from(r".*domain\.com.*\?page=[1-5]#(frag|ment)")
-                )),
-            },
-            ""
-        )));
+                ""
+            ))
+        );
         assert!(t_10.is_err());
         assert!(t_11.is_err());
         assert!(t_12.is_err());
@@ -840,29 +914,65 @@ mod tests {
         let t_013 = expression_().easy_parse(r#"r"   re gex   ""#);
         let t_014 = expression_().easy_parse(r###"r##"   r#""#   "##"###);
         let t_015 = expression_().easy_parse(
-            r#####"r####".*"### I'm header 3".*|^(WRY{3,}\.*)?(無駄)+$"####   etc...   "#####
+            r#####"r####".*"### I'm header 3".*|^(WRY{3,}\.*)?(無駄)+$"####   etc...   "#####,
         );
         let t_100 = expression_().easy_parse("");
         let t_101 = expression_().easy_parse("double quotes lack");
         let t_110 = expression_().easy_parse("r");
         let t_111 = expression_().easy_parse("r#double quotes lack#");
         assert_eq!(t_000, Ok((text::Expression::Words(Vec::new()), "")));
-        assert_eq!(t_001, Ok((text::Expression::Words(vec![String::from("title"),]), "")));
-        assert_eq!(t_002, Ok((text::Expression::Words(vec![
-            String::from("tit"),
-            String::from("le"),
-            ]), "")));
+        assert_eq!(
+            t_001,
+            Ok((text::Expression::Words(vec![String::from("title"),]), ""))
+        );
+        assert_eq!(
+            t_002,
+            Ok((
+                text::Expression::Words(vec![String::from("tit"), String::from("le"),]),
+                ""
+            ))
+        );
         assert_eq!(t_003, t_002);
-        assert_eq!(t_004, Ok((text::Expression::Words(vec![String::from("tit"),]), r#""le""#)));
-        assert_eq!(t_005, Ok((text::Expression::Words(vec![String::from(r#"double"quote"#),]), "")));
+        assert_eq!(
+            t_004,
+            Ok((
+                text::Expression::Words(vec![String::from("tit"),]),
+                r#""le""#
+            ))
+        );
+        assert_eq!(
+            t_005,
+            Ok((
+                text::Expression::Words(vec![String::from(r#"double"quote"#),]),
+                ""
+            ))
+        );
         assert_eq!(t_010, Ok((text::Expression::Regex(String::new()), "")));
         assert_eq!(t_011, t_010);
-        assert_eq!(t_012, Ok((text::Expression::Regex(String::from("re gex")), "")));
-        assert_eq!(t_013, Ok((text::Expression::Regex(String::from("   re gex   ")), "")));
-        assert_eq!(t_014, Ok((text::Expression::Regex(String::from(r##"   r#""#   "##)), "")));
-        assert_eq!(t_015, Ok((text::Expression::Regex(String::from(
-            r####".*"### I'm header 3".*|^(WRY{3,}\.*)?(無駄)+$"####
-        )), "   etc...   ")));
+        assert_eq!(
+            t_012,
+            Ok((text::Expression::Regex(String::from("re gex")), ""))
+        );
+        assert_eq!(
+            t_013,
+            Ok((text::Expression::Regex(String::from("   re gex   ")), ""))
+        );
+        assert_eq!(
+            t_014,
+            Ok((
+                text::Expression::Regex(String::from(r##"   r#""#   "##)),
+                ""
+            ))
+        );
+        assert_eq!(
+            t_015,
+            Ok((
+                text::Expression::Regex(String::from(
+                    r####".*"### I'm header 3".*|^(WRY{3,}\.*)?(無駄)+$"####
+                )),
+                "   etc...   "
+            ))
+        );
         assert!(t_100.is_err());
         assert!(t_101.is_err());
         assert!(t_110.is_err());
@@ -891,12 +1001,18 @@ mod tests {
     fn t_boolean_() {
         let t_00 = boolean_().easy_parse("a!sl   etc...   ");
         let t_10 = boolean_().easy_parse("!");
-        assert_eq!(t_00, Ok((Boolean {
-            is_archived: Some(true),
-            is_starred: Some(false),
-            is_leaf: Some(true),
-            is_root: None,
-        }, "   etc...   ")));
+        assert_eq!(
+            t_00,
+            Ok((
+                Boolean {
+                    is_archived: Some(true),
+                    is_starred: Some(false),
+                    is_leaf: Some(true),
+                    is_root: None,
+                },
+                "   etc...   "
+            ))
+        );
         assert!(t_10.is_err());
     }
     #[test]
@@ -909,47 +1025,79 @@ mod tests {
         let t_12 = datetime_().easy_parse("//:");
         let t_13 = datetime_().easy_parse("//T");
         let t_14 = datetime_().easy_parse("T:");
-        assert_eq!(t_00, Ok((models::EasyDateTime {
-            date: Some(models::EasyDate::default()),
-            time: Some(models::EasyTime::default()),
-        }, "")));
-        assert_eq!(t_01, Ok((models::EasyDateTime {
-            date: Some(models::EasyDate::default()),
-            time: None,
-        }, "")));
-        assert_eq!(t_02, Ok((models::EasyDateTime {
-            date: None,
-            time: Some(models::EasyTime::default()),
-        }, "")));
+        assert_eq!(
+            t_00,
+            Ok((
+                models::EasyDateTime {
+                    date: Some(models::EasyDate::default()),
+                    time: Some(models::EasyTime::default()),
+                },
+                ""
+            ))
+        );
+        assert_eq!(
+            t_01,
+            Ok((
+                models::EasyDateTime {
+                    date: Some(models::EasyDate::default()),
+                    time: None,
+                },
+                ""
+            ))
+        );
+        assert_eq!(
+            t_02,
+            Ok((
+                models::EasyDateTime {
+                    date: None,
+                    time: Some(models::EasyTime::default()),
+                },
+                ""
+            ))
+        );
         assert!(t_10.is_err());
         assert!(t_11.is_err());
-        assert_eq!(t_12, Ok((models::EasyDateTime {
-            date: Some(models::EasyDate::default()),
-            time: None,
-        }, ":"))); // can cause error next
-        assert_eq!(t_13, Ok((models::EasyDateTime {
-            date: Some(models::EasyDate::default()),
-            time: None,
-        }, "T"))); // can cause error next
+        assert_eq!(
+            t_12,
+            Ok((
+                models::EasyDateTime {
+                    date: Some(models::EasyDate::default()),
+                    time: None,
+                },
+                ":"
+            ))
+        ); // can cause error next
+        assert_eq!(
+            t_13,
+            Ok((
+                models::EasyDateTime {
+                    date: Some(models::EasyDate::default()),
+                    time: None,
+                },
+                "T"
+            ))
+        ); // can cause error next
         assert!(t_14.is_err());
     }
     #[test]
     fn t_date_() {
         let t_00 = date_().easy_parse("//");
-        let t_01 = date_().easy_parse(
-            "294277/01/01"
-        );
-        let t_02 = date_().easy_parse(
-            "0001/01/01"
-        );
+        let t_01 = date_().easy_parse("294277/01/01");
+        let t_02 = date_().easy_parse("0001/01/01");
         let t_10 = date_().easy_parse("");
         let t_11 = date_().easy_parse("12/31");
         let t_12 = date_().easy_parse("2021-01-07");
-        assert_eq!(t_00, Ok((models::EasyDate {
-            y: None,
-            m: None,
-            d: None,
-        }, "")));
+        assert_eq!(
+            t_00,
+            Ok((
+                models::EasyDate {
+                    y: None,
+                    m: None,
+                    d: None,
+                },
+                ""
+            ))
+        );
         assert!(t_01.is_ok());
         assert!(t_02.is_ok());
         assert!(t_10.is_err());
@@ -964,30 +1112,57 @@ mod tests {
         let t_03 = time_().easy_parse("24:");
         let t_04 = time_().easy_parse(":60");
         let t_05 = time_().easy_parse("23:59:59");
-        assert_eq!(t_00, Ok((models::EasyTime {
-            h: None,
-            m: None,
-        }, "")));
-        assert_eq!(t_01, Ok((models::EasyTime {
-            h: Some(0),
-            m: Some(0),
-        }, "")));
-        assert_eq!(t_02, Ok((models::EasyTime {
-            h: Some(23),
-            m: Some(59),
-        }, "")));
-        assert_eq!(t_03, Ok((models::EasyTime {
-            h: Some(24),
-            m: None,
-        }, "")));
-        assert_eq!(t_04, Ok((models::EasyTime {
-            h: None,
-            m: Some(60),
-        }, "")));
-        assert_eq!(t_05, Ok((models::EasyTime {
-            h: Some(23),
-            m: Some(59),
-        }, ":59")));
+        assert_eq!(t_00, Ok((models::EasyTime { h: None, m: None }, "")));
+        assert_eq!(
+            t_01,
+            Ok((
+                models::EasyTime {
+                    h: Some(0),
+                    m: Some(0),
+                },
+                ""
+            ))
+        );
+        assert_eq!(
+            t_02,
+            Ok((
+                models::EasyTime {
+                    h: Some(23),
+                    m: Some(59),
+                },
+                ""
+            ))
+        );
+        assert_eq!(
+            t_03,
+            Ok((
+                models::EasyTime {
+                    h: Some(24),
+                    m: None,
+                },
+                ""
+            ))
+        );
+        assert_eq!(
+            t_04,
+            Ok((
+                models::EasyTime {
+                    h: None,
+                    m: Some(60),
+                },
+                ""
+            ))
+        );
+        assert_eq!(
+            t_05,
+            Ok((
+                models::EasyTime {
+                    h: Some(23),
+                    m: Some(59),
+                },
+                ":59"
+            ))
+        );
     }
     #[test]
     fn t_req_task_() {
@@ -999,83 +1174,113 @@ mod tests {
         let t_11 = req_task_().easy_parse("      ambiguous indent");
         let t_13 = req_task_().easy_parse("    title\n    some    http://localhost");
         let t_14 = req_task_().easy_parse("    title\n    http://localhost    some");
-        assert_eq!(t_01, Ok((ReqTask {
-            indent: 0,
-            attribute: Attribute {
-                is_starred: false,
-                id: None,
-                weight: None,
-                joint_head: None,
-                joint_tail: None,
-                assign: None,
-                startable: None,
-                deadline: None,
-                title: String::from("title"),
-            },
-            link: None,
-        }, "")));
-        assert_eq!(t_02, Ok((ReqTask {
-            indent: 2,
-            attribute: Attribute {
-                is_starred: false,
-                id: None,
-                weight: None,
-                joint_head: None,
-                joint_tail: None,
-                assign: None,
-                startable: None,
-                deadline: None,
-                title: String::from("title"),
-            },
-            link: None,
-        }, "")));
-        assert_eq!(t_03, Ok((ReqTask {
-            indent: 1,
-            attribute: Attribute {
-                is_starred: false,
-                id: None,
-                weight: None,
-                joint_head: None,
-                joint_tail: None,
-                assign: None,
-                startable: None,
-                deadline: None,
-                title: String::from("title http://localhost"), // inline links fall into title
-            },
-            link: None,
-        }, "")));
-        assert_eq!(t_04, Ok((ReqTask {
-            indent: 1,
-            attribute: Attribute {
-                is_starred: false,
-                id: None,
-                weight: None,
-                joint_head: None,
-                joint_tail: None,
-                assign: None,
-                startable: None,
-                deadline: None,
-                title: String::from("title"),
-            },
-            link: Some(String::from("http://localhost")), // ok
-        }, "")));
+        assert_eq!(
+            t_01,
+            Ok((
+                ReqTask {
+                    indent: 0,
+                    attribute: Attribute {
+                        is_starred: false,
+                        id: None,
+                        weight: None,
+                        joint_head: None,
+                        joint_tail: None,
+                        assign: None,
+                        startable: None,
+                        deadline: None,
+                        title: String::from("title"),
+                    },
+                    link: None,
+                },
+                ""
+            ))
+        );
+        assert_eq!(
+            t_02,
+            Ok((
+                ReqTask {
+                    indent: 2,
+                    attribute: Attribute {
+                        is_starred: false,
+                        id: None,
+                        weight: None,
+                        joint_head: None,
+                        joint_tail: None,
+                        assign: None,
+                        startable: None,
+                        deadline: None,
+                        title: String::from("title"),
+                    },
+                    link: None,
+                },
+                ""
+            ))
+        );
+        assert_eq!(
+            t_03,
+            Ok((
+                ReqTask {
+                    indent: 1,
+                    attribute: Attribute {
+                        is_starred: false,
+                        id: None,
+                        weight: None,
+                        joint_head: None,
+                        joint_tail: None,
+                        assign: None,
+                        startable: None,
+                        deadline: None,
+                        title: String::from("title http://localhost"), // inline links fall into title
+                    },
+                    link: None,
+                },
+                ""
+            ))
+        );
+        assert_eq!(
+            t_04,
+            Ok((
+                ReqTask {
+                    indent: 1,
+                    attribute: Attribute {
+                        is_starred: false,
+                        id: None,
+                        weight: None,
+                        joint_head: None,
+                        joint_tail: None,
+                        assign: None,
+                        startable: None,
+                        deadline: None,
+                        title: String::from("title"),
+                    },
+                    link: Some(String::from("http://localhost")), // ok
+                },
+                ""
+            ))
+        );
         assert!(t_10.is_err());
         assert!(t_11.is_err());
-        assert_eq!(t_13, Ok((ReqTask {
-            indent: 1,
-            attribute: Attribute {
-                is_starred: false,
-                id: None,
-                weight: None,
-                joint_head: None,
-                joint_tail: None,
-                assign: None,
-                startable: None,
-                deadline: None,
-                title: String::from("title"),
-            },
-            link: None,
-        }, "    some    http://localhost")));
+        assert_eq!(
+            t_13,
+            Ok((
+                ReqTask {
+                    indent: 1,
+                    attribute: Attribute {
+                        is_starred: false,
+                        id: None,
+                        weight: None,
+                        joint_head: None,
+                        joint_tail: None,
+                        assign: None,
+                        startable: None,
+                        deadline: None,
+                        title: String::from("title"),
+                    },
+                    link: None,
+                },
+                "    some    http://localhost"
+            ))
+        );
         assert!(t_14.is_err());
     }
     #[test]
@@ -1094,7 +1299,8 @@ mod tests {
     #[test]
     fn t_attribute_() {
         let t_00 = attribute_().easy_parse("https://");
-        let t_02 = attribute_().easy_parse("#333 h] something * 15:- 魁 -/12/ [t $5 great $530000. @satun ⚡");
+        let t_02 = attribute_()
+            .easy_parse("#333 h] something * 15:- 魁 -/12/ [t $5 great $530000. @satun ⚡");
         let t_03 = attribute_().easy_parse("//T: //T //: // T: T :");
         let t_04 = attribute_().easy_parse("//T- //:- T:- T-");
         let t_10 = attribute_().easy_parse("");
@@ -1111,35 +1317,68 @@ mod tests {
         let t_21 = attribute_().easy_parse("@");
         let t_22 = attribute_().easy_parse("-T: -T");
         let mut attr = Attribute::default();
-        assert_eq!(t_00, Ok(({ attr.title = String::from("https://"); attr }, "")));
-        assert_eq!(t_02, Ok((Attribute {
-            is_starred: true,
-            id: Some(333),
-            weight: Some(530000.0),
-            joint_head: Some(String::from("h")),
-            joint_tail: Some(String::from("t")),
-            assign: Some(String::from("satun")),
-            startable: Some(models::EasyDateTime {
-                date: None,
-                time: Some(models::EasyTime {
-                    h: Some(15),
-                    m: None,
-                }),
-            }),
-            deadline: Some(models::EasyDateTime {
-                date: Some(models::EasyDate {
-                    y: None,
-                    m: Some(12),
-                    d: None,
-                }),
-                time: None,
-            }),
-            title: String::from("something 魁 great ⚡"),
-        }, "")));
+        assert_eq!(
+            t_00,
+            Ok((
+                {
+                    attr.title = String::from("https://");
+                    attr
+                },
+                ""
+            ))
+        );
+        assert_eq!(
+            t_02,
+            Ok((
+                Attribute {
+                    is_starred: true,
+                    id: Some(333),
+                    weight: Some(530000.0),
+                    joint_head: Some(String::from("h")),
+                    joint_tail: Some(String::from("t")),
+                    assign: Some(String::from("satun")),
+                    startable: Some(models::EasyDateTime {
+                        date: None,
+                        time: Some(models::EasyTime {
+                            h: Some(15),
+                            m: None,
+                        }),
+                    }),
+                    deadline: Some(models::EasyDateTime {
+                        date: Some(models::EasyDate {
+                            y: None,
+                            m: Some(12),
+                            d: None,
+                        }),
+                        time: None,
+                    }),
+                    title: String::from("something 魁 great ⚡"),
+                },
+                ""
+            ))
+        );
         let mut attr = Attribute::default();
-        assert_eq!(t_03, Ok(({ attr.title = String::from("//T: //T //: // T: T :"); attr }, "")));
+        assert_eq!(
+            t_03,
+            Ok((
+                {
+                    attr.title = String::from("//T: //T //: // T: T :");
+                    attr
+                },
+                ""
+            ))
+        );
         let mut attr = Attribute::default();
-        assert_eq!(t_04, Ok(({ attr.title = String::from("//T- //:- T:- T-"); attr }, "")));
+        assert_eq!(
+            t_04,
+            Ok((
+                {
+                    attr.title = String::from("//T- //:- T:- T-");
+                    attr
+                },
+                ""
+            ))
+        );
         assert!(t_10.is_err());
         assert!(t_11.is_err());
         assert!(t_12.is_err());
@@ -1153,7 +1392,16 @@ mod tests {
         assert_eq!(t_16.unwrap().1, ": title");
         assert!(t_17.is_err());
         let mut attr = Attribute::default();
-        assert_eq!(t_18, Ok(({ attr.title = String::from("]"); attr }, "")));
+        assert_eq!(
+            t_18,
+            Ok((
+                {
+                    attr.title = String::from("]");
+                    attr
+                },
+                ""
+            ))
+        );
         assert!(t_19.is_err());
         assert!(t_20.is_err());
         assert!(t_21.is_err());
@@ -1166,7 +1414,10 @@ mod tests {
         let t_10 = link_().easy_parse("");
         let t_11 = link_().easy_parse("   https://");
         assert_eq!(t_00, Ok((String::from("https://"), "")));
-        assert_eq!(t_01, Ok((String::from("http://subdomain.domai"), "ニホンゴ")));
+        assert_eq!(
+            t_01,
+            Ok((String::from("http://subdomain.domai"), "ニホンゴ"))
+        );
         assert!(t_10.is_err());
         assert!(t_11.is_err());
     }
@@ -1190,9 +1441,15 @@ mod tests {
         let t_11 = ascii_graphics1_().easy_parse(" ");
         let t_12 = ascii_graphics1_().easy_parse("\n");
         let t_13 = ascii_graphics1_().easy_parse("のんあすきー");
-        assert_eq!(t_00, Ok((String::from(
-            r##"!"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~"##
-        ), "   etc...")));
+        assert_eq!(
+            t_00,
+            Ok((
+                String::from(
+                    r##"!"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~"##
+                ),
+                "   etc..."
+            ))
+        );
         assert!(t_10.is_err());
         assert!(t_11.is_err());
         assert!(t_12.is_err());

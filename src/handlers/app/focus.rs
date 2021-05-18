@@ -16,39 +16,44 @@ pub async fn focus(
     user: models::AuthedUser,
     pool: web::Data<models::Pool>,
 ) -> Result<HttpResponse, errors::ServiceError> {
-
     let res_body = web::block(move || {
-        use diesel::dsl::exists;
         use crate::schema::arrows::dsl::*;
         use crate::schema::permissions::dsl::*;
-        use crate::schema::tasks::dsl::{tasks, id, assign};
+        use crate::schema::tasks::dsl::{assign, id, tasks};
         use crate::schema::users::dsl::users;
+        use diesel::dsl::exists;
 
         let conn = pool.get().unwrap();
         let tid = tid.into_inner();
         let query = tasks
-        .filter(exists(permissions
-            .filter(subject.eq(&user.id))
-            .filter(object.eq(assign))
-        ))
-        .inner_join(users)
-        .select(models::SelTask::columns());
+            .filter(exists(
+                permissions
+                    .filter(subject.eq(&user.id))
+                    .filter(object.eq(assign)),
+            ))
+            .inner_join(users)
+            .select(models::SelTask::columns());
 
         let pred = query
-        .filter(exists(arrows.filter(source.eq(id)).filter(target.eq(&tid))))
-        .load::<models::SelTask>(&conn)?
-        .into_iter().map(|t| t.to_res()).collect();
+            .filter(exists(arrows.filter(source.eq(id)).filter(target.eq(&tid))))
+            .load::<models::SelTask>(&conn)?
+            .into_iter()
+            .map(|t| t.to_res())
+            .collect();
 
         let succ = query
-        .filter(exists(arrows.filter(source.eq(&tid)).filter(target.eq(id))))
-        .load::<models::SelTask>(&conn)?
-        .into_iter().map(|t| t.to_res()).collect();
+            .filter(exists(arrows.filter(source.eq(&tid)).filter(target.eq(id))))
+            .load::<models::SelTask>(&conn)?
+            .into_iter()
+            .map(|t| t.to_res())
+            .collect();
 
         Ok(ResBody {
             pred: pred,
             succ: succ,
         })
-    }).await?;
+    })
+    .await?;
 
     Ok(HttpResponse::Ok().json(res_body))
 }

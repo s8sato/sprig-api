@@ -1,7 +1,9 @@
 use actix_web::{web, HttpResponse};
 use chrono::NaiveTime;
 use diesel::prelude::*;
-use serde::Deserialize;
+use rand::distributions::Alphanumeric;
+use rand::{thread_rng, Rng};
+use serde::{Deserialize, Serialize};
 
 use crate::errors;
 use crate::models;
@@ -13,60 +15,26 @@ pub struct ReqBody {
     key: uuid::Uuid,
     email: String,
     password: String,
-    reset_pw: bool
+    reset_pw: bool,
 }
 
 pub async fn register(
     req: web::Json<ReqBody>,
     pool: web::Data<models::Pool>,
 ) -> Result<HttpResponse, errors::ServiceError> {
-
     let _ = web::block(move || {
-        use crate::schema::allocations::dsl::allocations;
-        use crate::schema::permissions::dsl::permissions;
-        use crate::schema::users::dsl::{users, email};
-
         let conn = pool.get().unwrap();
         let req = req.into_inner();
         if req.reset_pw {
-            let old_user = users.filter(email.eq(&req.email)).first::<models::User>(&conn)?;
-            let alt_user = req.to_alt(&conn)?;
-            diesel::update(&old_user).set(&alt_user).execute(&conn)?;
+            req.to_alt(&conn)?.update(&req, &conn)?;
         } else {
-            let new_user = req.to_new(&conn)?;
-            let id = diesel::insert_into(users).values(&new_user).get_result::<models::User>(&conn)?.id;
-            let permission = models::Permission {
-                subject: id,
-                object: id,
-                edit: true,
-            };
-            diesel::insert_into(permissions).values(&permission).execute(&conn)?;
-            let allocation = models::Allocation {
-                owner: id,
-                open: NaiveTime::from_hms(9, 0, 0),
-                hours: 6,
-            };
-            diesel::insert_into(allocations).values(&allocation).execute(&conn)?;
-
+            req.to_new(&conn)?.insert(&conn)?;
         };
         Ok(())
-    }).await?;
+    })
+    .await?;
 
     Ok(HttpResponse::Ok().finish())
-}
-
-#[derive(Insertable)]
-#[table_name = "users"]
-struct NewUser {
-    email: String,
-    hash: String,
-    name: String,
-}
-
-#[derive(AsChangeset)]
-#[table_name = "users"]
-struct AltUser {
-    hash: Option<String>,
 }
 
 impl ReqBody {
@@ -85,17 +53,122 @@ impl ReqBody {
         })
     }
     fn accept(&self, conn: &models::Conn) -> Result<(), errors::ServiceError> {
-        use crate::schema::invitations::dsl::{invitations, email};
+        use crate::schema::invitations::dsl::{email, invitations};
 
         if let Ok(invitation) = invitations
             .find(&self.key)
             .filter(email.eq(&self.email))
-            .first::<models::Invitation>(conn) {
-                if chrono::Utc::now() < invitation.expires_at {
-                    return Ok(())
-                }
-                return Err(errors::ServiceError::BadRequest("invitation expired.".into()))
+            .first::<models::Invitation>(conn)
+        {
+            if chrono::Utc::now() < invitation.expires_at {
+                return Ok(());
             }
-        Err(errors::ServiceError::BadRequest("invitation invalid.".into()))
+            return Err(errors::ServiceError::BadRequest(
+                "invitation expired.".into(),
+            ));
+        }
+        Err(errors::ServiceError::BadRequest(
+            "invitation invalid.".into(),
+        ))
+    }
+}
+
+#[derive(Insertable)]
+#[table_name = "users"]
+struct NewUser {
+    email: String,
+    hash: String,
+    name: String,
+}
+
+impl NewUser {
+    fn insert(&self, conn: &models::Conn) -> Result<(), errors::ServiceError> {
+        use crate::schema::allocations::dsl::allocations;
+        use crate::schema::permissions::dsl::permissions;
+        use crate::schema::users::dsl::users;
+
+        let id = diesel::insert_into(users)
+            .values(self)
+            .get_result::<models::User>(conn)?
+            .id;
+        let permission = models::Permission {
+            subject: id,
+            object: id,
+            edit: true,
+        };
+        diesel::insert_into(permissions)
+            .values(&permission)
+            .execute(conn)?;
+        let allocation = models::Allocation {
+            owner: id,
+            open: NaiveTime::from_hms(9, 0, 0),
+            hours: 6,
+        };
+        diesel::insert_into(allocations)
+            .values(&allocation)
+            .execute(conn)?;
+        Ok(())
+    }
+}
+
+#[derive(AsChangeset)]
+#[table_name = "users"]
+struct AltUser {
+    hash: Option<String>,
+}
+
+impl AltUser {
+    fn update(&self, req: &ReqBody, conn: &models::Conn) -> Result<(), errors::ServiceError> {
+        use crate::schema::users::dsl::{email, users};
+
+        let old_user = users
+            .filter(email.eq(&req.email))
+            .first::<models::User>(conn)?;
+        diesel::update(&old_user).set(self).execute(conn)?;
+        Ok(())
+    }
+}
+
+// instant credentials for demo use
+#[derive(Serialize)]
+pub struct ResBody {
+    email: String,
+    password: String,
+}
+
+pub async fn get_account(
+    pool: web::Data<models::Pool>,
+) -> Result<HttpResponse, errors::ServiceError> {
+    let res_body = web::block(move || {
+        let conn = pool.get().unwrap();
+        let email = loop {
+            let rand: String = thread_rng()
+                .sample_iter(&Alphanumeric)
+                .take(8)
+                .map(char::from)
+                .collect();
+            if !super::invite::user_exists(&rand, &conn)? {
+                break rand;
+            }
+        };
+        let user = NewUser {
+            email: email.clone(),
+            hash: utils::hash(&email)?,
+            name: email,
+        };
+        user.insert(&conn)?;
+        Ok(ResBody::from(user))
+    })
+    .await?;
+
+    Ok(HttpResponse::Ok().json(&res_body))
+}
+
+impl From<NewUser> for ResBody {
+    fn from(user: NewUser) -> Self {
+        Self {
+            email: user.email.clone(),
+            password: user.email,
+        }
     }
 }
