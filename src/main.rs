@@ -3,7 +3,7 @@ extern crate diesel;
 
 use actix_cors::Cors;
 use actix_identity::{CookieIdentityPolicy, IdentityService};
-use actix_web::{middleware, web, App, HttpServer};
+use actix_web::{cookie::SameSite, middleware, web, App, HttpServer};
 use diesel::prelude::*;
 use diesel::r2d2::{self, ConnectionManager};
 
@@ -47,6 +47,8 @@ async fn main() -> std::io::Result<()> {
                     .name("auth")
                     .path("/")
                     .max_age(86400)
+                    .http_only(true)
+                    .same_site(SameSite::None)
                     .secure(utils::env_var("API_PROTOCOL") == "https"),
             ))
             .data(web::JsonConfig::default().limit(4096))
@@ -86,7 +88,7 @@ async fn main() -> std::io::Result<()> {
                     ),
             )
     })
-    .bind(utils::env_var("SOCKET_ADDRESS"))?
+    .bind(format!("0.0.0.0:{}", utils::env_var("PORT")))?
     .run()
     .await
 }
