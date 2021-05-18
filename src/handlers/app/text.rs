@@ -876,7 +876,7 @@ impl From<TmpTaskOk> for AltTask {
     }
 }
 
-fn cmd_help(f: &str) -> std::io::Result<String> {
-    let path = std::path::Path::new("src/handlers/app/_cmd_help").join(f);
+fn cmd_help(filename: &str) -> std::io::Result<String> {
+    let path = std::path::Path::new(&utils::env_var("CMD_HELP_DIR")).join(filename);
     std::fs::read_to_string(path)
 }
