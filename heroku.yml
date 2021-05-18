@@ -1,0 +1,16 @@
+# setup:
+#   addons:
+#   - plan: heroku-postgresql:hobby-dev
+#     as: DATABASE
+build:
+  docker:
+    web:
+      dockerfile: Dockerfile
+      target: prod
+    worker:
+      dockerfile: Dockerfile
+      target: dev
+release:
+  image: worker
+  command:
+    - diesel migration run
