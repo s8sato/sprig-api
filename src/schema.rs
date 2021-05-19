@@ -63,4 +63,11 @@ table! {
 joinable!(allocations -> users (owner));
 joinable!(tasks -> users (assign));
 
-allow_tables_to_appear_in_same_query!(allocations, arrows, invitations, permissions, tasks, users,);
+allow_tables_to_appear_in_same_query!(
+    allocations,
+    arrows,
+    invitations,
+    permissions,
+    tasks,
+    users,
+);

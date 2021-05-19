@@ -32,25 +32,29 @@ async fn main() -> std::io::Result<()> {
         .expect("Failed to create pool.");
 
     HttpServer::new(move || {
+        let is_dev = utils::env_var("MODE") == "dev";
         App::new()
             .data(pool.clone())
             .wrap(middleware::Logger::default())
-            .wrap(if utils::env_var("MODE") == "dev" {
+            .wrap(if is_dev {
                 Cors::permissive()
             } else {
                 Cors::default()
                     .allowed_origin(&utils::env_var("ACCESS_CONTROL_ALLOW_ORIGIN"))
                     .supports_credentials()
             })
-            .wrap(IdentityService::new(
-                CookieIdentityPolicy::new(utils::SECRET_KEY.as_bytes())
+            .wrap(IdentityService::new({
+                let cookie = CookieIdentityPolicy::new(utils::SECRET_KEY.as_bytes())
                     .name("auth")
                     .path("/")
                     .max_age(86400)
-                    .http_only(true)
-                    .same_site(SameSite::None)
-                    .secure(utils::env_var("API_PROTOCOL") == "https"),
-            ))
+                    .http_only(true);
+                if is_dev {
+                    cookie
+                } else {
+                    cookie.same_site(SameSite::None).secure(true)
+                }
+            }))
             .data(web::JsonConfig::default().limit(4096))
             .service(
                 web::scope("/api")
