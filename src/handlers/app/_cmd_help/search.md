@@ -1,4 +1,4 @@
-/s "" - # $ s d c u @"" &""
+/s "" @"" &"" - # $ s d c u
 
 
 
@@ -9,6 +9,8 @@
 EXAMPLES OF A CONDITION -->
 
 <!-- "TIT LE" <!-- title contains TIT and LE -->
+<!-- @"USER NAME" <!-- username contains USER and NAME-->
+<!-- &"URL LINK" <!-- url link contains URL and LINK -->
 <!-- -a <!-- archived -->
 <!-- -!s <!-- not starred -->
 <!-- -l!r <!-- leaf && not root -->
@@ -19,9 +21,7 @@ EXAMPLES OF A CONDITION -->
 <!-- c <!-- created_at anytime -->
 <!-- 2021//<u<//30T6: <!-- New Year's Day 2021 <= updated_at <= 6:00 on 30th of this month-->
 <!-- r"REGEX_TITLE" <!-- title matches REGEX_TITLE -->
+<!-- @r"REGEX_USER" <!-- username matches REGEX_USER -->
+<!-- &r"REGEX_URL" <!-- url link matches REGEX_URL -->
 <!-- #"DOUBLE "QUOTED" TITLE"# <!-- title contains DOUBLE, "QUOTED" and TITLE -->
 <!-- r##"REGEX_SHARP#"QUOTED"#TITLE"## <!-- title matches REGEX_SHARP#"QUOTED"#TITLE -->
-<!-- @"USER" <!-- username contains USER -->
-<!-- @r"REGEX_USER" <!-- username matches REGEX_USER -->
-<!-- &"URL" <!-- url link contains URL -->
-<!-- &r"REGEX_URL" <!-- url link matches REGEX_URL -->

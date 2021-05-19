@@ -7,10 +7,10 @@ build:
     web:
       dockerfile: Dockerfile
       target: prod
-    worker:
+    releaser:
       dockerfile: Dockerfile
       target: build
 release:
-  image: worker
+  image: releaser
   command:
     - diesel migration run
