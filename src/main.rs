@@ -40,6 +40,8 @@ async fn main() -> std::io::Result<()> {
                 Cors::permissive()
             } else {
                 Cors::default()
+                    .allow_any_header()
+                    .allow_any_method()
                     .allowed_origin(&utils::env_var("ACCESS_CONTROL_ALLOW_ORIGIN"))
                     .supports_credentials()
             })
