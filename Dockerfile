@@ -38,8 +38,10 @@ CMD diesel migration run
 
 # FROM debian:buster-slim AS prod
 FROM build AS prod
-RUN apt-get update
-RUN apt-get install libpq-dev -y
-COPY --from=build /usr/local/src/target/release/api /usr/local/bin/
+WORKDIR /usr/local/src
+# RUN apt-get update
+# RUN apt-get install libpq-dev -y
+# COPY --from=build /usr/local/src/target/release/api /usr/local/bin/
 COPY --from=build /usr/local/src/src/handlers/app/_cmd_help /usr/local/share/
-CMD ["api"]
+# CMD ["api"]
+CMD ["target/release/api"]
