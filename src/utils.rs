@@ -1,10 +1,9 @@
 use argon2;
+use once_cell::sync::Lazy;
 
 use crate::errors;
 
-lazy_static::lazy_static! {
-    pub static ref SECRET_KEY: String = env_var("SECRET_KEY");
-}
+pub static SECRET_KEY: Lazy<String> = Lazy::new(|| env_var("SECRET_KEY"));
 
 pub fn env_var(x: &str) -> String {
     std::env::var(x).expect(format!("{} must be set", x).as_str())

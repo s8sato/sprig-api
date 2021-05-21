@@ -3,6 +3,7 @@ use chrono_tz::Tz;
 use diesel::prelude::*;
 use serde::Deserialize;
 
+use super::_email::Email;
 use crate::errors;
 use crate::models;
 
@@ -21,7 +22,7 @@ pub async fn invite(
         let conn = pool.get().unwrap();
         let invitation: models::Invitation = req.into_inner().accept(&conn)?;
         dbg!(&invitation);
-        super::_email::send(&invitation)
+        Email::from(invitation).send()
     })
     .await?;
 
