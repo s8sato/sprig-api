@@ -1,11 +1,11 @@
-use actix_web::{
+pub use actix_web::{
     error::{BlockingError, ResponseError},
     http::StatusCode,
     HttpResponse,
 };
 use combine::error::StringStreamError;
 use derive_more::Display;
-use diesel::result::{DatabaseErrorKind, Error as DbError};
+pub use diesel::result::{DatabaseErrorKind, Error as DbError};
 
 #[derive(Debug, Display)]
 pub enum ServiceError {

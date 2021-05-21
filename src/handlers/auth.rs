@@ -40,16 +40,23 @@ pub async fn login(
 }
 
 pub async fn get_me(
+    id: Identity,
     user: models::AuthedUser,
     pool: web::Data<models::Pool>,
 ) -> Result<HttpResponse, errors::ServiceError> {
-    let res_body = web::block(move || {
+    match web::block(move || {
         let conn = pool.get().unwrap();
         user.to_res(&conn)
     })
-    .await?;
-
-    Ok(HttpResponse::Ok().json(&res_body))
+    .await
+    {
+        Ok(res_body) => Ok(HttpResponse::Ok().json(&res_body)),
+        Err(errors::BlockingError::Error(errors::DbError::NotFound)) => {
+            id.forget();
+            Err(errors::ServiceError::Unauthorized)
+        }
+        _ => Err(errors::ServiceError::InternalServerError),
+    }
 }
 
 pub async fn logout(id: Identity) -> HttpResponse {
@@ -77,10 +84,11 @@ impl ReqBody {
 }
 
 impl models::AuthedUser {
-    fn to_res(&self, conn: &models::Conn) -> Result<ResBody, errors::ServiceError> {
+    fn to_res(&self, conn: &models::Conn) -> Result<ResBody, errors::DbError> {
         use crate::schema::allocations::dsl::{allocations, owner};
         use crate::schema::users::dsl::users;
 
+        // NotFound after DB reset despite having identity
         let user = users.find(self.id).first::<models::User>(conn)?;
         let _allocations = allocations
             .filter(owner.eq(&self.id))
