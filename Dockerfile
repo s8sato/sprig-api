@@ -1,5 +1,4 @@
-# FROM rust:1.48 AS base
-FROM rust:latest AS base
+FROM rust:1.52 AS base
 RUN cargo install diesel_cli --no-default-features --features postgres
 
 FROM base AS dev
@@ -38,11 +37,8 @@ RUN cargo build --release
 CMD diesel migration run
 
 FROM debian:buster-slim AS prod
-# FROM build AS prod
-# WORKDIR /usr/local/src
 RUN apt update
 RUN apt install -y libpq-dev ca-certificates libssl-dev
 COPY --from=build /usr/local/src/target/release/api /usr/local/bin/
 COPY --from=build /usr/local/src/src/handlers/app/_cmd_help /usr/local/share/
 CMD ["api"]
-# CMD ["target/release/api"]
