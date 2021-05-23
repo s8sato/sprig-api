@@ -80,7 +80,7 @@ impl Email {
 
 impl From<models::Invitation> for Email {
     fn from(invitation: models::Invitation) -> Self {
-        let app = utils::env_var("APP_NAME");
+        let app = utils::env_var("SENDER");
         let subject = format!(
             "{} {}",
             if invitation.forgot_pw {

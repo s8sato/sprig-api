@@ -16,13 +16,7 @@ mod utils;
 #[actix_rt::main]
 async fn main() -> std::io::Result<()> {
     dotenv::dotenv().ok();
-    std::env::set_var(
-        "RUST_LOG",
-        format!(
-            "{}=DEBUG,actix_web=INFO,actix_server=INFO",
-            utils::env_var("APP_NAME")
-        ),
-    );
+    std::env::set_var("RUST_LOG", "api=debug,actix_web=info,actix_server=info");
     env_logger::init();
 
     let pool: models::Pool = r2d2::Pool::builder()
@@ -32,11 +26,11 @@ async fn main() -> std::io::Result<()> {
         .expect("Failed to create pool.");
 
     HttpServer::new(move || {
-        let is_dev = utils::env_var("MODE") == "dev";
+        let is_cross_origin = utils::env_var("IS_CROSS_ORIGIN").parse::<bool>().unwrap();
         App::new()
             .data(pool.clone())
             .wrap(middleware::Logger::default())
-            .wrap(if is_dev {
+            .wrap(if !is_cross_origin {
                 Cors::permissive()
             } else {
                 Cors::default()
@@ -51,7 +45,7 @@ async fn main() -> std::io::Result<()> {
                     .path("/")
                     .max_age(86400)
                     .http_only(true);
-                if is_dev {
+                if !is_cross_origin {
                     cookie
                 } else {
                     cookie.same_site(SameSite::None).secure(true)
