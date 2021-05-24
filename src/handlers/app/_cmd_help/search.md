@@ -2,7 +2,7 @@
 
 
 
-<!-- Search for tasks by conditions.
+<!-- Search for items by conditions.
 /s {condition} {condition} ...
 
 

@@ -80,15 +80,14 @@ impl Email {
 
 impl From<models::Invitation> for Email {
     fn from(invitation: models::Invitation) -> Self {
-        let app = utils::env_var("SENDER");
+        let sender = utils::env_var("SENDER_NAME");
         let subject = format!(
-            "{} {}",
+            "{} Sprig",
             if invitation.forgot_pw {
                 "Reset Password of"
             } else {
                 "Invitation to"
             },
-            app,
         );
         let body = format!(
             "\
@@ -111,7 +110,7 @@ impl From<models::Invitation> for Email {
             invitation.tz,
         );
         Self {
-            sender: app,
+            sender: sender,
             from: utils::env_var("SENDING_EMAIL_ADDRESS"),
             to: invitation.email,
             subject: subject,

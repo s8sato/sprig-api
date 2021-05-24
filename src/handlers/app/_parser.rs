@@ -117,8 +117,8 @@ parser! {
 parser! {
     fn req_modify_[Input]()(Input) -> ReqModify
     where [ Input: Stream<Token = char> ] {
-        let permission = |s: &'static str, p: Option<bool>| {
-            attempt(string(s)).with(spaces1_().with(namings1_()))
+        let permission = |c: char, p: Option<bool>| {
+            token(c).with(spaces1_().with(namings1_()))
             .map(move |x| ReqModify::Permission(ReqPermission {user: x, permission: p}))
         };
         choice((
@@ -127,9 +127,9 @@ parser! {
             token('n').with(spaces1_().with(namings1_())).map(|x| ReqModify::Name(x)),
             token('t').with(spaces1_().with(timescale_())).map(|x| ReqModify::Timescale(x)),
             token('a').with(many(spaces1_().with(req_allocation_()))).map(|x| ReqModify::Allocations(x)),
-            permission("p0", None),
-            permission("p1", Some(false)),
-            permission("p2", Some(true)),
+            permission('0', None),
+            permission('1', Some(false)),
+            permission('2', Some(true)),
         ))
     }
 }
