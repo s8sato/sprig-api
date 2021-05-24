@@ -23,7 +23,8 @@ FROM debian:buster-slim AS prod
 RUN apt update
 RUN apt install -y libpq-dev ca-certificates libssl-dev
 COPY --from=build /target/release/api /usr/local/bin/
-COPY --from=build /${CMD_HELP_DIR} /usr/local/share/help
+ARG cmd_help_dir=src/handlers/app/_cmd_help
+COPY --from=build /${cmd_help_dir} /usr/local/share/help
 CMD ["api"]
 
 
