@@ -85,6 +85,7 @@ pub enum ReqModify {
     Name(String),
     Timescale(Timescale),
     Allocations(Vec<ReqAllocation>),
+    Permission(ReqPermission),
 }
 
 #[derive(Debug, PartialEq)]
@@ -95,6 +96,12 @@ pub struct PasswordSet {
 }
 
 pub type ReqAllocation = models::ResAllocation;
+
+#[derive(Debug, PartialEq, Serialize)]
+pub struct ReqPermission {
+    pub user: String,
+    pub permission: Option<bool>,
+}
 
 #[derive(Serialize)]
 enum ResCmd {
@@ -132,7 +139,10 @@ enum ResModify {
     Name(String),
     Timescale(String),
     Allocations(Vec<models::ResAllocation>),
+    Permission(ResPermission),
 }
+
+type ResPermission = ReqPermission;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Timescale {
@@ -308,19 +318,45 @@ impl ReqModify {
         conn: &models::Conn,
     ) -> Result<ResModify, errors::ServiceError> {
         use crate::schema::allocations::dsl::{allocations, owner};
-        use crate::schema::users::dsl::{email, name, users};
+        use crate::schema::permissions::dsl::*;
+        use crate::schema::users::dsl::{email, id, name, users};
         use diesel::dsl::{exists, select};
 
-        if let Self::Allocations(req_alcs) = self {
+        if let Self::Allocations(req) = self {
             let mut ins = Vec::new();
-            for alc in &req_alcs {
+            for alc in &req {
                 ins.push(alc.verify(user)?);
             }
             diesel::delete(allocations.filter(owner.eq(&user.id))).execute(conn)?;
             diesel::insert_into(allocations)
                 .values(&ins)
                 .execute(conn)?;
-            return Ok(ResModify::Allocations(req_alcs));
+            return Ok(ResModify::Allocations(req));
+        }
+        if let Self::Permission(req) = self {
+            let subject_ = users
+                .select(id)
+                .filter(name.eq(&req.user))
+                .first::<i32>(conn)
+                .map_err(|_| {
+                    errors::ServiceError::BadRequest(format!("{}: user not found.", req.user))
+                })?;
+            diesel::delete(
+                permissions
+                    .filter(subject.eq(&subject_))
+                    .filter(object.eq(&user.id)),
+            )
+            .execute(conn)?;
+            if let Some(edit_) = req.permission {
+                diesel::insert_into(permissions)
+                    .values(&models::Permission {
+                        subject: subject_,
+                        object: user.id,
+                        edit: edit_,
+                    })
+                    .execute(conn)?;
+            }
+            return Ok(ResModify::Permission(req));
         }
         let mut alt_user = AltUser {
             email: None,
@@ -806,9 +842,9 @@ impl Acceptor {
         let mut assigns = Vec::new();
         for t in &self.tasks {
             let mut assign = user.id;
-            if let Some(_name) = &t.assign {
+            if let Some(name_) = &t.assign {
                 match users
-                    .filter(name.eq(&_name))
+                    .filter(name.eq(&name_))
                     .filter(exists(
                         permissions
                             .filter(subject.eq(&user.id))
@@ -821,7 +857,7 @@ impl Acceptor {
                     Err(_) => {
                         return Err(errors::ServiceError::BadRequest(format!(
                             "@{}: user not found.",
-                            _name,
+                            name_,
                         )))
                     }
                 }
