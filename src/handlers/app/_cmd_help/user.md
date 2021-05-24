@@ -4,7 +4,7 @@
 
 Select one,
 remove <!-- prefix,
-and press [Ctrl]+[Enter] to submit. -->
+and press [Ctrl]+[Enter] to send. -->
 
 <!-- /u <!-- this help -->
 <!-- /u -i <!-- show user info in input area -->
