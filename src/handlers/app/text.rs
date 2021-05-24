@@ -108,11 +108,21 @@ enum ResCmd {
 enum ResUser {
     Help(String),
     Info {
+        email: String,
         since: DateTime<Utc>,
         executed: i32,
         tz: Tz,
+        permissions: ResPermissions,
     },
     Modify(ResModify),
+}
+
+#[derive(Serialize)]
+struct ResPermissions {
+    view_to: Vec<String>,
+    edit_to: Vec<String>,
+    view_from: Vec<String>,
+    edit_from: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -230,12 +240,12 @@ impl ReqUser {
         conn: &models::Conn,
     ) -> Result<ResUser, errors::ServiceError> {
         use crate::schema::tasks::dsl::{assign, is_archived, tasks};
-        use crate::schema::users::dsl::{created_at, users};
+        use crate::schema::users::dsl::{created_at, email, users};
 
-        let since = users
+        let (email_, since) = users
             .find(user.id)
-            .select(created_at)
-            .first::<DateTime<Utc>>(conn)?;
+            .select((email, created_at))
+            .first::<(String, DateTime<Utc>)>(conn)?;
         let executed = tasks
             .filter(assign.eq(&user.id))
             .filter(is_archived)
@@ -243,10 +253,51 @@ impl ReqUser {
             .get_result::<i64>(conn)? as i32;
 
         Ok(ResUser::Info {
+            email: email_,
             since: since,
             executed: executed,
             tz: user.tz,
+            permissions: user.permissions(conn)?,
         })
+    }
+}
+
+impl models::AuthedUser {
+    fn permissions(&self, conn: &models::Conn) -> Result<ResPermissions, errors::ServiceError> {
+        Ok(ResPermissions {
+            view_to: self.to(false, conn)?,
+            edit_to: self.to(true, conn)?,
+            view_from: self.from(false, conn)?,
+            edit_from: self.from(true, conn)?,
+        })
+    }
+    fn to(&self, edit_: bool, conn: &models::Conn) -> Result<Vec<String>, errors::DbError> {
+        use crate::schema::permissions::dsl::*;
+        use crate::schema::users::dsl::{id, name, users};
+        use diesel::dsl::exists;
+        users
+            .select(name)
+            .filter(exists(
+                permissions
+                    .filter(subject.eq(&self.id))
+                    .filter(object.eq(id))
+                    .filter(edit.eq(edit_)),
+            ))
+            .load::<String>(conn)
+    }
+    fn from(&self, edit_: bool, conn: &models::Conn) -> Result<Vec<String>, errors::DbError> {
+        use crate::schema::permissions::dsl::*;
+        use crate::schema::users::dsl::{id, name, users};
+        use diesel::dsl::exists;
+        users
+            .select(name)
+            .filter(exists(
+                permissions
+                    .filter(subject.eq(id))
+                    .filter(object.eq(&self.id))
+                    .filter(edit.eq(edit_)),
+            ))
+            .load::<String>(conn)
     }
 }
 

@@ -7,7 +7,7 @@ remove <!-- prefix,
 and press [Ctrl]+[Enter] to submit. -->
 
 <!-- /u <!-- this help -->
-<!-- TODOX /u -i <!-- show user info in input area -->
+<!-- /u -i <!-- show user info in input area -->
 <!-- /u -e {email} <!-- modify user email -->
 <!-- /u -p {old} {new} {new} <!-- modify user password -->
 <!-- /u -n {name} <!-- modify user name -->

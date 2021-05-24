@@ -2,16 +2,21 @@ use combine::parser::{
     char::{digit, newline, space, string},
     combinator::recognize,
     repeat::{skip_count_min_max, take_until},
+    sequence::then,
 };
 use combine::{
     attempt, choice, eof, from_str, many, many1, optional, parser, satisfy, sep_by1, skip_many,
     skip_many1, token, Parser, Stream,
 };
+use once_cell::sync::Lazy;
 use std::str::FromStr;
 
 use super::text::{self, *};
 use crate::errors;
 use crate::models;
+use crate::utils;
+
+static INDENT: Lazy<String> = Lazy::new(|| utils::env_var("INDENT"));
 
 impl FromStr for Req {
     type Err = errors::ServiceError;
@@ -114,12 +119,22 @@ parser! {
     fn req_modify_[Input]()(Input) -> ReqModify
     where [ Input: Stream<Token = char> ] {
         choice((
-            token('e').with(spaces1_().with(ascii_graphics1_())).map(|x| ReqModify::Email(x)),
+            token('e').with(spaces1_().with(email_())).map(|x| ReqModify::Email(x)),
             token('p').with(spaces1_().with(password_set_())).map(|x| ReqModify::Password(x)),
-            token('n').with(spaces1_().with(ascii_graphics1_())).map(|x| ReqModify::Name(x)),
+            token('n').with(spaces1_().with(namings1_())).map(|x| ReqModify::Name(x)),
             token('t').with(spaces1_().with(timescale_())).map(|x| ReqModify::Timescale(x)),
             token('a').with(many(spaces1_().with(req_allocation_()))).map(|x| ReqModify::Allocations(x)),
         ))
+    }
+}
+parser! {
+    fn email_[Input]()(Input) -> String
+    where [ Input: Stream<Token = char> ] {
+        attempt(recognize((
+            namings1_(),
+            token('@'),
+            namings1_(),
+        )))
     }
 }
 parser! {
@@ -410,10 +425,7 @@ struct Indent;
 parser! {
     fn indent_item_[Input]()(Input) -> Indent
     where [ Input: Stream<Token = char> ] {
-        choice((
-            token('\t').map(|_| Indent),
-            skip_count_min_max(4, 4, token(' ')).map(|_| Indent),
-        ))
+        attempt(string(&*INDENT)).map(|_| Indent)
     }
 }
 impl std::iter::Extend<Indent> for i32 {
@@ -554,6 +566,18 @@ parser! {
     }
 }
 parser! {
+    fn naming_[Input]()(Input) -> char
+    where [ Input: Stream<Token = char> ] {
+        satisfy(|c: char| c.is_ascii_alphanumeric() || "-._".contains(c))
+    }
+}
+parser! {
+    fn namings1_[Input]()(Input) -> String
+    where [ Input: Stream<Token = char> ] {
+        many1(naming_())
+    }
+}
+parser! {
     fn ascii_graphic_[Input]()(Input) -> char
     where [ Input: Stream<Token = char> ] {
         satisfy(|c: char| c.is_ascii_graphic())
@@ -592,7 +616,7 @@ parser! {
 parser! {
     fn graphic_not_joint_[Input]()(Input) -> char
     where [ Input: Stream<Token = char> ] {
-        satisfy(|c: char| !c.is_whitespace() && !c.is_control() && !"[]".contains(c))
+        graphic_().then(|c: char| satisfy(move |_| !"[]".contains(c)))
     }
 }
 parser! {
