@@ -245,7 +245,6 @@ parser! {
         ))
     }
 }
-// TODO enum ConditionItem
 impl std::iter::Extend<Self> for Condition {
     fn extend<T: IntoIterator<Item = Self>>(&mut self, iter: T) {
         for item in iter {
@@ -334,7 +333,6 @@ parser! {
         })
     }
 }
-// TODO enum BooleanItem
 impl std::iter::Extend<Self> for Boolean {
     fn extend<T: IntoIterator<Item = Self>>(&mut self, iter: T) {
         for item in iter {
@@ -431,7 +429,7 @@ struct Indent;
 parser! {
     fn indent_item_[Input]()(Input) -> Indent
     where [ Input: Stream<Token = char> ] {
-        attempt(string(&*INDENT)).map(|_| Indent)
+        string(&*INDENT).map(|_| Indent)
     }
 }
 impl std::iter::Extend<Indent> for i32 {
@@ -441,7 +439,6 @@ impl std::iter::Extend<Indent> for i32 {
         }
     }
 }
-// TODO enum AttributeItem
 impl std::iter::Extend<Self> for Attribute {
     fn extend<T: IntoIterator<Item = Self>>(&mut self, iter: T) {
         for item in iter {
@@ -457,9 +454,8 @@ impl std::iter::Extend<Self> for Attribute {
             if let Some(x) = item.joint_head {
                 self.joint_head = Some(x)
             };
-            if let Some(x) = item.joint_tail {
-                self.joint_tail = Some(x)
-            };
+            let mut tails = item.joint_tails;
+            self.joint_tails.append(&mut tails);
             if let Some(x) = item.assign {
                 self.assign = Some(x)
             };
@@ -515,7 +511,7 @@ parser! {
             }),
             token('[').with(graphics1_not_joint_()).map(|g| {
                 let mut attribute = Attribute::default();
-                attribute.joint_tail = Some(g);
+                attribute.joint_tails.push(g);
                 attribute
             }),
             attempt(datetime_().skip(token('-'))).map(|dt| {
@@ -601,10 +597,13 @@ parser! {
         many1(ascii_graphic_())
     }
 }
+fn is_graphic(c: char) -> bool {
+    !c.is_whitespace() && !c.is_control()
+}
 parser! {
     fn graphic_[Input]()(Input) -> char
     where [ Input: Stream<Token = char> ] {
-        satisfy(|c: char| !c.is_whitespace() && !c.is_control())
+        satisfy(|c: char| is_graphic(c))
     }
 }
 parser! {
@@ -622,7 +621,7 @@ parser! {
 parser! {
     fn graphic_not_joint_[Input]()(Input) -> char
     where [ Input: Stream<Token = char> ] {
-        graphic_().then(|c: char| satisfy(move |_| !"[]".contains(c)))
+        satisfy(|c: char| is_graphic(c) && !"[]".contains(c))
     }
 }
 parser! {
@@ -678,7 +677,7 @@ mod tests {
         let t_10 = req_().easy_parse("/12/- * task");
         assert_eq!(t_00, Ok((Req::Tasks(ReqTasks { tasks: Vec::new() }), "")));
         assert_eq!(t_01, Ok((Req::Cmd(ReqCmd::Help), "")));
-        assert_eq!(t_10, Ok((Req::Cmd(ReqCmd::Help), "12/- * task")));
+        assert!(t_10.is_err());
     }
     #[test]
     fn t_req_cmd_() {
@@ -1030,7 +1029,7 @@ mod tests {
     #[test]
     fn t_boolean_() {
         let t_00 = boolean_().easy_parse("a!sl   etc...   ");
-        let t_10 = boolean_().easy_parse("!");
+        let t_01 = boolean_().easy_parse("!");
         assert_eq!(
             t_00,
             Ok((
@@ -1043,7 +1042,7 @@ mod tests {
                 "   etc...   "
             ))
         );
-        assert!(t_10.is_err());
+        assert_eq!(t_01, Ok((Boolean::default(), "!")));
     }
     #[test]
     fn t_datetime_() {
@@ -1196,8 +1195,9 @@ mod tests {
     }
     #[test]
     fn t_req_task_() {
+        std::env::set_var("INDENT", "    ");
         let t_01 = req_task_().easy_parse("title");
-        let t_02 = req_task_().easy_parse("\t\ttitle");
+        let t_02 = req_task_().easy_parse("        title");
         let t_03 = req_task_().easy_parse("    title http://localhost");
         let t_04 = req_task_().easy_parse("    title\n    http://localhost");
         let t_10 = req_task_().easy_parse("");
@@ -1214,7 +1214,7 @@ mod tests {
                         id: None,
                         weight: None,
                         joint_head: None,
-                        joint_tail: None,
+                        joint_tails: Vec::new(),
                         assign: None,
                         startable: None,
                         deadline: None,
@@ -1235,7 +1235,7 @@ mod tests {
                         id: None,
                         weight: None,
                         joint_head: None,
-                        joint_tail: None,
+                        joint_tails: Vec::new(),
                         assign: None,
                         startable: None,
                         deadline: None,
@@ -1256,7 +1256,7 @@ mod tests {
                         id: None,
                         weight: None,
                         joint_head: None,
-                        joint_tail: None,
+                        joint_tails: Vec::new(),
                         assign: None,
                         startable: None,
                         deadline: None,
@@ -1277,7 +1277,7 @@ mod tests {
                         id: None,
                         weight: None,
                         joint_head: None,
-                        joint_tail: None,
+                        joint_tails: Vec::new(),
                         assign: None,
                         startable: None,
                         deadline: None,
@@ -1300,7 +1300,7 @@ mod tests {
                         id: None,
                         weight: None,
                         joint_head: None,
-                        joint_tail: None,
+                        joint_tails: Vec::new(),
                         assign: None,
                         startable: None,
                         deadline: None,
@@ -1315,13 +1315,14 @@ mod tests {
     }
     #[test]
     fn t_indent_() {
+        std::env::set_var("INDENT", "    ");
         let t_00 = indent_().easy_parse("    g");
-        let t_01 = indent_().easy_parse("\t\tg    ");
+        let t_01 = indent_().easy_parse("        g");
         let t_03 = indent_().easy_parse("");
         let t_04 = indent_().easy_parse("\n");
-        let t_10 = indent_().easy_parse("     g");
+        let t_10 = indent_().easy_parse("      g");
         assert_eq!(t_00, Ok((1, "g")));
-        assert_eq!(t_01, Ok((2, "g    ")));
+        assert_eq!(t_01, Ok((2, "g")));
         assert_eq!(t_03, Ok((0, "")));
         assert_eq!(t_04, Ok((0, "\n")));
         assert!(t_10.is_err());
@@ -1330,7 +1331,7 @@ mod tests {
     fn t_attribute_() {
         let t_00 = attribute_().easy_parse("https://");
         let t_02 = attribute_()
-            .easy_parse("#333 h] something * 15:- 魁 -/12/ [t $5 great $530000. @satun ⚡");
+            .easy_parse("#333 h] something * 15:- 魁 -/12/ [t0 [t1 $5 great $530000. @satun ⚡");
         let t_03 = attribute_().easy_parse("//T: //T //: // T: T :");
         let t_04 = attribute_().easy_parse("//T- //:- T:- T-");
         let t_10 = attribute_().easy_parse("");
@@ -1365,7 +1366,7 @@ mod tests {
                     id: Some(333),
                     weight: Some(530000.0),
                     joint_head: Some(String::from("h")),
-                    joint_tail: Some(String::from("t")),
+                    joint_tails: vec![String::from("t0"), String::from("t1")],
                     assign: Some(String::from("satun")),
                     startable: Some(models::EasyDateTime {
                         date: None,

@@ -215,7 +215,7 @@ pub struct Attribute {
     pub id: Option<i32>,
     pub weight: Option<f32>,
     pub joint_head: Option<String>,
-    pub joint_tail: Option<String>,
+    pub joint_tails: Vec<String>,
     pub assign: Option<String>,
     pub startable: Option<models::EasyDateTime>,
     pub deadline: Option<models::EasyDateTime>,
@@ -640,30 +640,29 @@ impl ReqTasks {
         let iter = self.tasks.iter().enumerate().rev();
         let mut tmp_arrows = Vec::new();
         for (src, t) in iter.clone() {
+            // dependencies by indents
             if let Some((tgt, _)) = iter
                 .clone()
                 .filter(|(idx, _)| *idx < src)
-                .find(|(_, _t)| _t.indent < t.indent)
+                .find(|(_, t_)| t_.indent < t.indent)
             {
                 tmp_arrows.push(models::Arrow {
                     source: src as i32,
                     target: tgt as i32,
                 });
             }
-            for (tgt, _) in iter.clone().filter(|(_, _t)| {
-                if let (Some(tail), Some(head)) =
-                    (&_t.attribute.joint_tail, &t.attribute.joint_head)
-                {
-                    tail == head
-                } else {
-                    false
-                }
-            }) {
-                tmp_arrows.push(models::Arrow {
-                    source: src as i32,
-                    target: tgt as i32,
+            // dependencies by joints
+            iter.clone()
+                .filter(|(_, t_)| match &t.attribute.joint_head {
+                    Some(head) => t_.attribute.joint_tails.iter().any(|tail| tail == head),
+                    _ => false,
+                })
+                .for_each(|(tgt, _)| {
+                    tmp_arrows.push(models::Arrow {
+                        source: src as i32,
+                        target: tgt as i32,
+                    });
                 });
-            }
         }
         let mut tmp_tasks = Vec::new();
         for t in self.tasks {
