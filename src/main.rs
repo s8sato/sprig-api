@@ -31,7 +31,7 @@ async fn main() -> std::io::Result<()> {
             .data(pool.clone())
             .wrap(middleware::Logger::default())
             .wrap(if !is_cross_origin {
-                Cors::permissive()
+                Cors::default()
             } else {
                 Cors::default()
                     .allow_any_header()
