@@ -37,6 +37,7 @@ impl FromStr for API {
 
 impl Email {
     pub fn send(&self) -> Result<(), errors::ServiceError> {
+        let api_key = utils::env_var("EMAIL_API_KEY");
         match utils::env_var("EMAIL_API").parse::<API>()? {
             API::SendGrid => {
                 let mail = Mail::new()
@@ -46,7 +47,7 @@ impl Email {
                     .add_subject(&*self.subject)
                     .add_html(&*self.body);
 
-                match SGClient::new(utils::env_var("SENDGRID_API_KEY")).send(mail) {
+                match SGClient::new(api_key).send(mail) {
                     Ok(res) => {
                         println!("SendGrid Response:\n{:#?}", res);
                         Ok(())
@@ -63,7 +64,7 @@ impl Email {
                     .subject(&*self.subject)
                     .html(&*self.body);
 
-                match Transmission::new(utils::env_var("SPARKPOST_API_KEY")).send(&mail) {
+                match Transmission::new(api_key).send(&mail) {
                     Ok(res) => {
                         println!("SparkPost Response:\n{:#?}", res);
                         Ok(())

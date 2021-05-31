@@ -16,6 +16,11 @@ mod utils;
 #[actix_rt::main]
 async fn main() -> std::io::Result<()> {
     dotenv::dotenv().ok();
+    if let Ok(env_files) = std::env::var("ENV_FILES") {
+        env_files.split(':').for_each(|f| {
+            dotenv::from_filename(f).ok();
+        });
+    }
     std::env::set_var("RUST_LOG", "api=debug,actix_web=info,actix_server=info");
     env_logger::init();
 

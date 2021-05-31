@@ -1,4 +1,11 @@
+ARG cmd_help_dir
+ARG work_dir
+
+
+
 FROM rust:1.52 AS base
+ENV WORK_DIR $work_dir
+WORKDIR $WORK_DIR
 RUN cargo install diesel_cli --no-default-features --features postgres
 
 
@@ -22,18 +29,14 @@ CMD diesel migration run
 FROM debian:buster-slim AS prod
 RUN apt update
 RUN apt install -y libpq-dev ca-certificates libssl-dev
-COPY --from=build /target/release/api /usr/local/bin/
-ARG cmd_help_dir=src/handlers/app/_cmd_help
-COPY --from=build /${cmd_help_dir} /usr/local/share/help
+COPY --from=build ${work_dir}/target/release/api /usr/local/bin/
+COPY --from=build ${work_dir}/src/handlers/app/_cmd_help ${cmd_help_dir}
 CMD ["api"]
 
 
 
 FROM base AS dev
-ARG bind_mnt
-ENV BIND_MNT $bind_mnt
 RUN cargo install cargo-watch
-WORKDIR $BIND_MNT
 # build dependencies
 COPY Cargo.toml Cargo.lock ./
 RUN echo 'fn main() {}' >dummy.rs
@@ -43,5 +46,4 @@ RUN sed -i 's#dummy.rs#src/main.rs#' Cargo.toml
 RUN rm dummy.rs
 #
 COPY . .
-CMD diesel migration run && \
-    cargo watch -x run
+CMD cargo watch -x run
