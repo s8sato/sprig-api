@@ -1,9 +1,10 @@
-ARG cmd_help_dir
-ARG work_dir
+# ARG cmd_help_dir
+# ARG work_dir
 
 
 
 FROM rust:1.52 AS base
+ARG work_dir
 ENV WORK_DIR $work_dir
 WORKDIR $WORK_DIR
 RUN cargo install diesel_cli --no-default-features --features postgres
@@ -29,6 +30,8 @@ CMD diesel migration run
 FROM debian:buster-slim AS prod
 RUN apt update
 RUN apt install -y libpq-dev ca-certificates libssl-dev
+ARG cmd_help_dir
+ARG work_dir
 COPY --from=build ${work_dir}/target/release/api /usr/local/bin/
 COPY --from=build ${work_dir}/src/handlers/app/_cmd_help ${cmd_help_dir}
 CMD ["api"]
