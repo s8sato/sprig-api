@@ -31,7 +31,7 @@ jobs:
       env:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         ECR_REPOSITORY: sprig
-        IMAGE_TAGS: stg,api,latest,${{ github.sha }}
+        IMAGE_TAGS: stg-api-${{ github.sha }}
         BUILD_EXTRA: --build-arg cmd_help_dir=/usr/local/share/help --build-arg work_dir=/usr/local/src --target prod
       run: |
         readonly REPO_URI="$ECR_REGISTRY/$ECR_REPOSITORY"
@@ -51,7 +51,7 @@ jobs:
       env:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         ECR_REPOSITORY: sprig
-        IMAGE_TAGS: stg,migration,latest,${{ github.sha }}
+        IMAGE_TAGS: stg-migration-${{ github.sha }}
         BUILD_EXTRA: --build-arg cmd_help_dir=/usr/local/share/help --build-arg work_dir=/usr/local/src --target build
       run: |
         readonly REPO_URI="$ECR_REGISTRY/$ECR_REPOSITORY"
