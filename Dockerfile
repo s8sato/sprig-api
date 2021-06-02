@@ -13,12 +13,11 @@ RUN cargo install diesel_cli --no-default-features --features postgres
 
 FROM base AS build
 # build dependencies
-COPY Cargo.toml Cargo.lock ./
-RUN echo 'fn main() {}' >dummy.rs
-RUN sed -i 's#src/main.rs#dummy.rs#' Cargo.toml
+COPY Cargo.toml ./
+RUN mkdir src
+RUN echo 'fn main() {}' >src/main.rs
 RUN cargo build --release
-RUN sed -i 's#dummy.rs#src/main.rs#' Cargo.toml
-RUN rm dummy.rs
+RUN rm -f target/release/deps/api*
 # build executable
 COPY . .
 RUN cargo build --release
@@ -41,12 +40,11 @@ CMD ["api"]
 FROM base AS dev
 RUN cargo install cargo-watch
 # build dependencies
-COPY Cargo.toml Cargo.lock ./
-RUN echo 'fn main() {}' >dummy.rs
-RUN sed -i 's#src/main.rs#dummy.rs#' Cargo.toml
+COPY Cargo.toml ./
+RUN mkdir src
+RUN echo 'fn main() {}' >src/main.rs
 RUN cargo build
-RUN sed -i 's#dummy.rs#src/main.rs#' Cargo.toml
-RUN rm dummy.rs
+RUN rm -f target/debug/deps/api*
 #
 COPY . .
 CMD cargo watch -x run
