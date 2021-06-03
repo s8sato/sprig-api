@@ -3,26 +3,33 @@
 
 
 
+FROM rust:1.52-slim-buster AS migration
+RUN apt update
+RUN apt install -y libpq-dev
+RUN cargo install diesel_cli --no-default-features --features postgres
+COPY migrations/ ./migrations/
+CMD diesel migration run
+
+
+
 FROM rust:1.52 AS base
 ARG work_dir
 ENV WORK_DIR $work_dir
 WORKDIR $WORK_DIR
-RUN cargo install diesel_cli --no-default-features --features postgres
 
 
 
 FROM base AS build
 # build dependencies
-COPY Cargo.toml ./
-RUN mkdir src
-RUN echo 'fn main() {}' >src/main.rs
+COPY Cargo.toml Cargo.lock ./
+RUN echo 'fn main() {}' >dummy.rs
+RUN sed -i 's#src/main.rs#dummy.rs#' Cargo.toml
 RUN cargo build --release
-RUN rm -f target/release/deps/api*
+RUN sed -i 's#dummy.rs#src/main.rs#' Cargo.toml
+RUN rm dummy.rs
 # build executable
 COPY . .
 RUN cargo build --release
-#
-CMD diesel migration run
 
 
 
@@ -40,11 +47,12 @@ CMD ["api"]
 FROM base AS dev
 RUN cargo install cargo-watch
 # build dependencies
-COPY Cargo.toml ./
-RUN mkdir src
-RUN echo 'fn main() {}' >src/main.rs
+COPY Cargo.toml Cargo.lock ./
+RUN echo 'fn main() {}' >dummy.rs
+RUN sed -i 's#src/main.rs#dummy.rs#' Cargo.toml
 RUN cargo build
-RUN rm -f target/debug/deps/api*
+RUN sed -i 's#dummy.rs#src/main.rs#' Cargo.toml
+RUN rm dummy.rs
 #
 COPY . .
 CMD cargo watch -x run
