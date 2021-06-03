@@ -1,0 +1,12 @@
+build:
+  docker:
+    web:
+      dockerfile: Dockerfile
+      target: prod
+    releaser:
+      dockerfile: Dockerfile
+      target: build
+release:
+  image: releaser
+  command:
+    - diesel migration run
