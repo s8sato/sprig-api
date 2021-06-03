@@ -26,42 +26,28 @@ jobs:
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v1
 
-    - name: Build, tag, and push image to Amazon ECR - api
-      id: build-image-api
-      env:
-        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        ECR_REPOSITORY: sprig
-        IMAGE_TAGS: stg-api-${{ github.sha }}
-        BUILD_EXTRA: --build-arg cmd_help_dir=/usr/local/share/help --build-arg work_dir=/usr/local/src --target prod
-      run: |
-        readonly REPO_URI="$ECR_REGISTRY/$ECR_REPOSITORY"
-        readonly TAGS=$(echo "$IMAGE_TAGS" | tr "," "\n")
-        tag_args=""
-        for tag in $TAGS; do
-          tag_args="$tag_args -t $REPO_URI:$tag"
-        done
-        docker build $BUILD_EXTRA $tag_args .
-        for tag in $TAGS; do
-          docker push $REPO_URI:$tag
-          echo "::set-output name=image::$REPO_URI:$tag"
-        done
-
     - name: Build, tag, and push image to Amazon ECR - migration
       id: build-image-migration
       env:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         ECR_REPOSITORY: sprig
-        IMAGE_TAGS: stg-migration-${{ github.sha }}
-        BUILD_EXTRA: --build-arg cmd_help_dir=/usr/local/share/help --build-arg work_dir=/usr/local/src --target build
+        IMAGE_TAG: stg-migration-${{ github.sha }}
+        BUILD_EXTRA: --target migration
       run: |
-        readonly REPO_URI="$ECR_REGISTRY/$ECR_REPOSITORY"
-        readonly TAGS=$(echo "$IMAGE_TAGS" | tr "," "\n")
-        tag_args=""
-        for tag in $TAGS; do
-          tag_args="$tag_args -t $REPO_URI:$tag"
-        done
-        docker build $BUILD_EXTRA $tag_args .
-        for tag in $TAGS; do
-          docker push $REPO_URI:$tag
-          echo "::set-output name=image::$REPO_URI:$tag"
-        done
+        readonly IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+        docker build $BUILD_EXTRA -t $IMAGE .
+        docker push $IMAGE
+        echo "::set-output name=image::$IMAGE"
+
+    - name: Build, tag, and push image to Amazon ECR - api
+      id: build-image-api
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        ECR_REPOSITORY: sprig
+        IMAGE_TAG: stg-api-${{ github.sha }}
+        BUILD_EXTRA: --build-arg cmd_help_dir=/usr/local/share/help --build-arg work_dir=/usr/local/src --target prod
+      run: |
+        readonly IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+        docker build $BUILD_EXTRA -t $IMAGE .
+        docker push $IMAGE
+        echo "::set-output name=image::$IMAGE"
