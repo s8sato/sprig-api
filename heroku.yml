@@ -5,7 +5,7 @@ build:
       target: prod
     releaser:
       dockerfile: Dockerfile
-      target: build
+      target: migration
 release:
   image: releaser
   command:
