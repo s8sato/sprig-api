@@ -8,12 +8,12 @@ use crate::models;
 #[derive(Deserialize)]
 pub struct ReqBody {
     tasks: Vec<i32>,
-    token: Option<String>,
+    token: Option<uuid::Uuid>,
 }
 
 #[derive(Serialize)]
 pub struct ResBody {
-    token: Option<String>,
+    token: Option<uuid::Uuid>,
 }
 
 pub async fn delete(
@@ -30,13 +30,12 @@ pub async fn delete(
             None => {
                 req.accept(&user, &conn)?;
                 // create one-time token
-                let token = user.get_token(&conn)?.id.to_string();
                 Ok(ResBody {
-                    token: Some(token),
+                    token: Some(user.get_token(&conn)?.id),
                 })
             },
-            Some(s) => {
-                user.verify_token(&*s, &conn)?;
+            Some(token) => {
+                user.consume_token(token, &conn)?;
                 // perform deletion
                 diesel::delete(
                     tasks.filter(id.eq_any(req.tasks))

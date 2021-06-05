@@ -53,22 +53,20 @@ impl ReqBody {
         })
     }
     fn accept(&self, conn: &models::Conn) -> Result<(), errors::ServiceError> {
-        use crate::schema::invitations::dsl::{email, invitations};
+        use crate::schema::invitations::dsl::{email, expires_at, invitations};
 
+        diesel::delete(
+            invitations.filter(expires_at.lt(&chrono::Utc::now()))
+        ).execute(conn)?;
         if let Ok(invitation) = invitations
             .find(&self.key)
             .filter(email.eq(&self.email))
-            .first::<models::Invitation>(conn)
-        {
-            if chrono::Utc::now() < invitation.expires_at {
+            .first::<models::Invitation>(conn) {
+                diesel::delete(&invitation).execute(conn)?;
                 return Ok(());
             }
-            return Err(errors::ServiceError::BadRequest(
-                "invitation expired.".into(),
-            ));
-        }
         Err(errors::ServiceError::BadRequest(
-            "invitation invalid.".into(),
+            "invitation invalid.".into()
         ))
     }
 }
