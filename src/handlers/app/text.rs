@@ -167,9 +167,7 @@ enum ResSearch {
 #[derive(Debug, Default, PartialEq, PartialOrd)]
 pub struct Condition {
     pub boolean: Boolean,
-    // TODO limit 333<#<777 use to !is_archived
-    // TODO impl 333<!<777 for critical-Path
-    pub context: Range<i32>,
+    pub context: Range<i32>, // TODO /s <#< not archived tasks only?
     pub weight: Range<f32>,
     pub startable: Range<models::EasyDateTime>,
     pub deadline: Range<models::EasyDateTime>,
@@ -498,7 +496,7 @@ impl Condition {
         let mut res_tasks = self.query(user, conn)?;
         self.filter_regex(&mut res_tasks)?;
         if max(self.context.0, self.context.1).is_some() {
-            // TODO load all arrows ?
+            // TODO /s <#< load all arrows?
             let _arrows: models::Arrows = arrows.load::<models::Arrow>(conn)?.into();
             self.filter_context(&mut res_tasks, &_arrows);
         }
@@ -584,7 +582,7 @@ impl Condition {
         }
         Ok(query
             .order((is_starred.desc(), updated_at.desc()))
-            .limit(100) // TODO limit extraction ?
+            .limit(100) // TODO /s limit up to 100?
             .load::<models::SelTask>(conn)?
             .into_iter()
             .map(|t| t.to_res())
