@@ -49,6 +49,14 @@ table! {
 }
 
 table! {
+    tokens (id) {
+        id -> Uuid,
+        owner -> Int4,
+        expires_at -> Timestamptz,
+    }
+}
+
+table! {
     users (id) {
         id -> Int4,
         email -> Varchar,
@@ -62,6 +70,7 @@ table! {
 
 joinable!(allocations -> users (owner));
 joinable!(tasks -> users (assign));
+joinable!(tokens -> users (owner));
 
 allow_tables_to_appear_in_same_query!(
     allocations,
@@ -69,5 +78,6 @@ allow_tables_to_appear_in_same_query!(
     invitations,
     permissions,
     tasks,
+    tokens,
     users,
 );

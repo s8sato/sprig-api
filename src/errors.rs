@@ -7,7 +7,7 @@ use combine::error::StringStreamError;
 use derive_more::Display;
 pub use diesel::result::{DatabaseErrorKind, Error as DbError};
 
-#[derive(Debug, Display)]
+#[derive(Debug, Display, Clone)]
 pub enum ServiceError {
     BadRequest(String),
     Unauthorized,

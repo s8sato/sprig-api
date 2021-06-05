@@ -48,7 +48,7 @@ pub struct Permission {
 
 #[derive(Queryable, Identifiable)]
 pub struct Task {
-    pub id: i32,
+    pub id: i32, // TODO task.id: i64
     pub title: String,
     pub assign: i32,
     pub is_archived: bool,
@@ -59,6 +59,13 @@ pub struct Task {
     pub link: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Queryable, Identifiable, Insertable)]
+pub struct Token {
+    pub id: uuid::Uuid,
+    pub owner: i32,
+    pub expires_at: DateTime<Utc>,
 }
 
 #[derive(Queryable, Identifiable)]
@@ -466,5 +473,47 @@ impl From<Allocation> for ResAllocation {
             open_m: alc.open.format("%M").to_string().parse::<i32>().unwrap(),
             hours: alc.hours,
         }
+    }
+}
+
+impl AuthedUser {
+    pub fn get_token(
+        &self,
+        conn: &Conn,
+    ) -> Result<Token, errors::ServiceError> {
+        use crate::schema::tokens::dsl::tokens;
+
+        Ok(
+            diesel::insert_into(tokens).values(
+                Token {
+                    id: uuid::Uuid::new_v4(),
+                    owner: self.id,
+                    expires_at: chrono::Utc::now() + chrono::Duration::minutes(1),
+                }
+            ).get_result::<Token>(conn)?
+        )
+    }
+    pub fn verify_token(
+        &self,
+        token: &str,
+        conn: &Conn
+    ) -> Result<(), errors::ServiceError> {
+        use crate::schema::tokens::dsl::{owner, tokens};
+
+        let invalid = errors::ServiceError::BadRequest(
+            "one-time token invalid.".into()
+        );
+        if let Ok(token) = tokens
+            .find(&token.parse::<uuid::Uuid>().map_err(|_| invalid.clone())?)
+            .filter(owner.eq(&self.id))
+            .first::<Token>(conn) {
+                if chrono::Utc::now() < token.expires_at {
+                    return Ok(());
+                }
+                return Err(errors::ServiceError::BadRequest(
+                    "one-time token expired.".into(),
+                ));
+            }
+        Err(invalid)
     }
 }
