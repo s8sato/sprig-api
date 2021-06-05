@@ -29,7 +29,7 @@ pub struct Arrow {
     pub target: i32,
 }
 
-#[derive(Queryable, Insertable, Debug)]
+#[derive(Queryable, Identifiable, Insertable, Debug)]
 pub struct Invitation {
     pub id: uuid::Uuid,
     pub email: String,
@@ -493,27 +493,25 @@ impl AuthedUser {
             ).get_result::<Token>(conn)?
         )
     }
-    pub fn verify_token(
+    pub fn consume_token(
         &self,
-        token: &str,
+        token: uuid::Uuid,
         conn: &Conn
     ) -> Result<(), errors::ServiceError> {
-        use crate::schema::tokens::dsl::{owner, tokens};
+        use crate::schema::tokens::dsl::{expires_at, owner, tokens};
 
-        let invalid = errors::ServiceError::BadRequest(
-            "one-time token invalid.".into()
-        );
+        diesel::delete(
+            tokens.filter(expires_at.lt(&chrono::Utc::now()))
+        ).execute(conn)?;
         if let Ok(token) = tokens
-            .find(&token.parse::<uuid::Uuid>().map_err(|_| invalid.clone())?)
+            .find(&token)
             .filter(owner.eq(&self.id))
             .first::<Token>(conn) {
-                if chrono::Utc::now() < token.expires_at {
-                    return Ok(());
-                }
-                return Err(errors::ServiceError::BadRequest(
-                    "one-time token expired.".into(),
-                ));
+                diesel::delete(&token).execute(conn)?;
+                return Ok(());
             }
-        Err(invalid)
+        Err(errors::ServiceError::BadRequest(
+            "one-time token invalid.".into()
+        ))
     }
 }

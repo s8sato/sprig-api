@@ -1,6 +1,6 @@
 #!/bin/bash
 
-readonly APP_NAME=sprig-demo
+readonly APP_NAME=sprig-demo-api
 
 readonly ACCESS_CONTROL_ALLOW_ORIGIN=https://satu-n.github.io
 readonly CMD_HELP_DIR=/usr/local/share/help
@@ -31,4 +31,4 @@ heroku config:set SECRET_KEY=$SECRET_KEY
 heroku config:set SENDER_NAME="$SENDER_NAME"
 heroku config:set SENDING_EMAIL_ADDRESS=$SENDING_EMAIL_ADDRESS
 
-git push heroku main
+git push heroku <branchname>:main
