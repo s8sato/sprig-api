@@ -6,6 +6,9 @@ build:
     releaser:
       dockerfile: Dockerfile
       target: migration
+  config:
+    cmd_help_dir: ####
+    work_dir: ####
 release:
   image: releaser
   command:
