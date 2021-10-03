@@ -3,7 +3,7 @@
 
 
 
-FROM rust:1.52-slim-buster AS migration
+FROM rust:1.55-slim-buster AS migration
 RUN apt update
 RUN apt install -y libpq-dev
 RUN cargo install diesel_cli --no-default-features --features postgres
@@ -12,7 +12,7 @@ CMD diesel migration run
 
 
 
-FROM rust:1.52 AS base
+FROM rust:1.55 AS base
 ARG work_dir
 ENV WORK_DIR $work_dir
 WORKDIR $WORK_DIR

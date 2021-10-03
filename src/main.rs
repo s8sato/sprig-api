@@ -75,20 +75,6 @@ async fn main() -> std::io::Result<()> {
                     )
                     .service(
                         web::scope("/app")
-                            .wrap_fn(|req, srv| {
-                                use actix_identity::RequestIdentity;
-                                if req.get_identity().is_some() {
-                                    use actix_service::Service;
-                                    srv.call(req)
-                                } else {
-                                    use actix_web::{dev, HttpResponse};
-                                    use futures::future::{ok, Either};
-                                    Either::Right(ok(dev::ServiceResponse::new(
-                                        req.into_parts().0,
-                                        HttpResponse::Unauthorized().finish(),
-                                    )))
-                                }
-                            })
                             .configure(auth_protected),
                     ),
             )
