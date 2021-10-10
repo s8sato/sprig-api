@@ -1,3 +1,4 @@
 /target/
 /.env
 /heroku.sh
+/heroku.yml
