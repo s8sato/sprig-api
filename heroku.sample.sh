@@ -1,8 +1,8 @@
 #!/bin/bash
-
+set -e
 readonly APP_NAME=sprig-demo-api
 
-readonly ACCESS_CONTROL_ALLOW_ORIGIN=https://satu-n.github.io
+readonly ACCESS_CONTROL_ALLOW_ORIGIN=https://s8sato.github.io
 readonly CMD_HELP_DIR=/usr/local/share/help
 # DATABASE_URL: Given by Heroku Postgres
 readonly EMAIL_API=SparkPost # or SendGrid
